@@ -14,6 +14,9 @@
 #include <gui/dialogs/dialog_box.h>
 #include <fstream>
 
+//TODO: Add bookmark list color (Displayed as ribbon on bookmark label)
+//TODO: Improve frequency manager menu UI
+
 SDRPP_MOD_INFO{
     /* Name:            */ "frequency_manager",
     /* Description:     */ "Frequency manager module for SDR++",
@@ -26,6 +29,7 @@ struct FrequencyBookmark {
     double frequency;
     double bandwidth;
     int mode;
+    float color[3];
     bool selected;
 };
 
@@ -58,6 +62,7 @@ enum {
 };
 
 const char* bookmarkDisplayModesTxt = "Off\0Top\0Bottom\0";
+constexpr float bookmarkDefaultColor[3] = {1.0f, 1.0f, 0.0f};
 
 class FrequencyManagerModule : public ModuleManager::Instance {
 public:
@@ -123,6 +128,34 @@ private:
         }
     }
 
+    static FrequencyBookmark parseBookmark(const json& bm) {
+        FrequencyBookmark fbm;
+
+        try {
+            fbm.frequency = bm.value("frequency", 0.0);
+            fbm.bandwidth = bm.value("bandwidth", 0.0);
+            fbm.mode = bm.value("mode", 0);
+        } catch (json::exception& e) {
+            flog::error("Error loading bookmark data: {}", e.what());
+        }
+
+        memcpy(fbm.color, bookmarkDefaultColor, sizeof(bookmarkDefaultColor));
+
+        try {
+            if (bm.contains("color") && bm["color"].is_object()) {
+                const auto& c = bm["color"];
+                fbm.color[0] = c.value("r", bookmarkDefaultColor[0]);
+                fbm.color[1] = c.value("g", bookmarkDefaultColor[1]);
+                fbm.color[2] = c.value("b", bookmarkDefaultColor[2]);
+            }
+        } catch (json::exception& e) {
+            flog::error("Error loading bookmark color: {}", e.what());
+        }
+
+        fbm.selected = false;
+        return fbm;
+    }
+
     bool bookmarkEditDialog() {
         bool open = true;
         gui::mainWindow.lockWaterfallControls = true;
@@ -166,6 +199,13 @@ private:
             ImGui::SetNextItemWidth(200);
 
             ImGui::Combo(("##freq_manager_edit_mode" + name).c_str(), &editedBookmark.mode, demodModeListTxt);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::LeftLabel("Color");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(200);
+            ImGui::ColorEdit3("##freq_manager_edit_color", editedBookmark.color, ImGuiColorEditFlags_DisplayRGB);
 
             ImGui::EndTable();
 
@@ -292,11 +332,9 @@ private:
             WaterfallBookmark wbm;
             wbm.listName = listName;
             for (auto [bookmarkName, bm] : config.conf["lists"][listName]["bookmarks"].items()) {
+                flog::debug("loading bookmark {}", bookmarkName.c_str());
                 wbm.bookmarkName = bookmarkName;
-                wbm.bookmark.frequency = config.conf["lists"][listName]["bookmarks"][bookmarkName]["frequency"];
-                wbm.bookmark.bandwidth = config.conf["lists"][listName]["bookmarks"][bookmarkName]["bandwidth"];
-                wbm.bookmark.mode = config.conf["lists"][listName]["bookmarks"][bookmarkName]["mode"];
-                wbm.bookmark.selected = false;
+                wbm.bookmark = parseBookmark(bm);
                 waterfallBookmarks.push_back(wbm);
             }
         }
@@ -323,13 +361,9 @@ private:
         selectedListId = std::distance(listNames.begin(), std::find(listNames.begin(), listNames.end(), listName));
         selectedListName = listName;
         config.acquire();
-        for (auto [bmName, bm] : config.conf["lists"][listName]["bookmarks"].items()) {
-            FrequencyBookmark fbm;
-            fbm.frequency = bm["frequency"];
-            fbm.bandwidth = bm["bandwidth"];
-            fbm.mode = bm["mode"];
-            fbm.selected = false;
-            bookmarks[bmName] = fbm;
+        for (const auto& [bookmarkName, bm] : config.conf["lists"][listName]["bookmarks"].items()) {
+            flog::debug("loading bookmark {}", bookmarkName.c_str());
+            bookmarks[bookmarkName] = parseBookmark(bm);
         }
         config.release();
     }
@@ -341,6 +375,9 @@ private:
             config.conf["lists"][listName]["bookmarks"][bmName]["frequency"] = bm.frequency;
             config.conf["lists"][listName]["bookmarks"][bmName]["bandwidth"] = bm.bandwidth;
             config.conf["lists"][listName]["bookmarks"][bmName]["mode"] = bm.mode;
+            config.conf["lists"][listName]["bookmarks"][bmName]["color"]["r"] = bm.color[0];
+            config.conf["lists"][listName]["bookmarks"][bmName]["color"]["g"] = bm.color[1];
+            config.conf["lists"][listName]["bookmarks"][bmName]["color"]["b"] = bm.color[2];
         }
         refreshWaterfallBookmarks(false);
         config.release(true);
@@ -438,6 +475,8 @@ private:
                     _this->editedBookmark.mode = mode;
                 }
             }
+
+             memcpy(_this->editedBookmark.color, bookmarkDefaultColor, std::size(bookmarkDefaultColor));
 
             _this->editedBookmark.selected = false;
 
@@ -620,8 +659,10 @@ private:
                 ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y);
                 ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y);
 
+                ImVec4 bookMarkColor = ImVec4(bm.bookmark.color[0], bm.bookmark.color[1], bm.bookmark.color[2], 1.0f);
+
                 if (clampedRectMax.x - clampedRectMin.x > 0) {
-                    args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, IM_COL32(255, 255, 0, 255));
+                    args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, ImGui::ColorConvertFloat4ToU32(bookMarkColor));
                 }
                 if (rectMin.x >= args.min.x && rectMax.x <= args.max.x) {
                     args.window->DrawList->AddText(ImVec2(centerXpos - (nameSize.x / 2), args.min.y), IM_COL32(0, 0, 0, 255), bm.bookmarkName.c_str());
@@ -773,12 +814,7 @@ private:
                 flog::warn("Bookmark with the name '{0}' already exists in list, skipping", _name);
                 continue;
             }
-            FrequencyBookmark fbm;
-            fbm.frequency = bm["frequency"];
-            fbm.bandwidth = bm["bandwidth"];
-            fbm.mode = bm["mode"];
-            fbm.selected = false;
-            bookmarks[_name] = fbm;
+            bookmarks[_name] = parseBookmark(bm);
         }
         saveByName(selectedListName);
 
