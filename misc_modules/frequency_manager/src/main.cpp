@@ -63,6 +63,8 @@ enum {
 
 const char* bookmarkDisplayModesTxt = "Off\0Top\0Bottom\0";
 constexpr float bookmarkDefaultColor[3] = {1.0f, 1.0f, 0.0f};
+constexpr float bookmarkNameTextPadding = 5.0f;
+constexpr float bookmarkGroupPadding = 1.0f;
 
 class FrequencyManagerModule : public ModuleManager::Instance {
 public:
@@ -641,53 +643,117 @@ private:
         }
     }
 
+    struct BookmarkLabel {
+        WaterfallBookmark* ptr_bm;
+        float minX;
+        float maxX;
+    };
+
+    struct BookmarkGroup {
+        std::vector<BookmarkLabel> vec_labels;
+        float minX;
+        float maxX;
+    };
+
     static void fftRedraw(ImGui::WaterFall::FFTRedrawArgs args, void* ctx) {
         FrequencyManagerModule* _this = (FrequencyManagerModule*)ctx;
         if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_OFF) { return; }
+        if (_this->waterfallBookmarks.empty()) { return; }
+
+        std::vector<BookmarkLabel> visibleLabels;
+
+        for (auto& bm: _this->waterfallBookmarks) {
+            double centerXpos = args.min.x + std::round((bm.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
+
+            ImVec2 nameSize = ImGui::CalcTextSize(bm.bookmarkName.c_str());
+            float rectMinX = centerXpos - (nameSize.x / 2) - bookmarkNameTextPadding;
+            float rectMaxX = centerXpos + (nameSize.x / 2) + bookmarkNameTextPadding;
+
+            if (rectMaxX > args.min.x && rectMinX < args.max.x) {
+                visibleLabels.push_back({&bm, rectMinX, rectMaxX});
+            }
+        }
+
+        if (visibleLabels.empty()) { return; }
+
+        std::sort(visibleLabels.begin(), visibleLabels.end(), [](const auto& a, const auto& b) {
+            return a.minX < b.minX;
+        });
+
+        std::vector<BookmarkGroup> groups;
+        groups.push_back({{visibleLabels[0]}, visibleLabels[0].minX, visibleLabels[0].maxX});
+
+        if (visibleLabels.size() > 1) {
+
+            for (auto it = visibleLabels.begin() + 1; it != visibleLabels.end(); ++it) {
+                auto& label = *it;
+
+                if (label.minX <= groups.back().maxX + bookmarkGroupPadding) {
+                    groups.back().vec_labels.push_back(label);
+                    groups.back().maxX = std::max(groups.back().maxX, label.maxX);
+                } else {
+                    groups.push_back({{label}, label.minX, label.maxX});
+                }
+            }
+        }
 
         if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_TOP) {
-            for (auto const bm : _this->waterfallBookmarks) {
-                double centerXpos = args.min.x + std::round((bm.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
+            for (auto& group : groups) {
+                for (int i = 0; i < group.vec_labels.size(); i++) {
+                    auto& label = group.vec_labels.at(i);
 
-                if (bm.bookmark.frequency >= args.lowFreq && bm.bookmark.frequency <= args.highFreq) {
-                    args.window->DrawList->AddLine(ImVec2(centerXpos, args.min.y), ImVec2(centerXpos, args.max.y), IM_COL32(255, 255, 0, 255));
-                }
+                    ImVec4 bookMarkColor = ImVec4(label.ptr_bm->bookmark.color[0], label.ptr_bm->bookmark.color[1], label.ptr_bm->bookmark.color[2], 1.0f);
 
-                ImVec2 nameSize = ImGui::CalcTextSize(bm.bookmarkName.c_str());
-                ImVec2 rectMin = ImVec2(centerXpos - (nameSize.x / 2) - 5, args.min.y);
-                ImVec2 rectMax = ImVec2(centerXpos + (nameSize.x / 2) + 5, args.min.y + nameSize.y);
-                ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y);
-                ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y);
+                    float labelSizeX = label.maxX - label.minX;
+                    double centerXpos = label.minX + (labelSizeX) / 2.0f;
 
-                ImVec4 bookMarkColor = ImVec4(bm.bookmark.color[0], bm.bookmark.color[1], bm.bookmark.color[2], 1.0f);
+                    float nameSizeY = ImGui::GetTextLineHeight();
 
-                if (clampedRectMax.x - clampedRectMin.x > 0) {
-                    args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, ImGui::ColorConvertFloat4ToU32(bookMarkColor));
-                }
-                if (rectMin.x >= args.min.x && rectMax.x <= args.max.x) {
-                    args.window->DrawList->AddText(ImVec2(centerXpos - (nameSize.x / 2), args.min.y), IM_COL32(0, 0, 0, 255), bm.bookmarkName.c_str());
+                    ImVec2 rectMin = ImVec2(label.minX, args.min.y + nameSizeY * i);
+                    ImVec2 rectMax = ImVec2(label.maxX, args.min.y + nameSizeY * (i + 1));
+
+                    ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y);
+                    ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y);
+
+                    if (label.ptr_bm->bookmark.frequency >= args.lowFreq && label.ptr_bm->bookmark.frequency <= args.highFreq) {
+                        args.window->DrawList->AddLine(ImVec2(centerXpos, clampedRectMax.y), ImVec2(centerXpos, args.max.y), ImGui::ColorConvertFloat4ToU32(bookMarkColor));
+                    }
+                    if (clampedRectMax.x - clampedRectMin.x > 0) {
+                        args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, ImGui::ColorConvertFloat4ToU32(bookMarkColor));
+                    }
+                    if (rectMin.x >= args.min.x && rectMax.x <= args.max.x) {
+                        args.window->DrawList->AddText(ImVec2(rectMin.x + bookmarkNameTextPadding, rectMin.y), IM_COL32(0, 0, 0, 255), label.ptr_bm->bookmarkName.c_str());
+                    }
                 }
             }
         }
         else if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_BOTTOM) {
-            for (auto const bm : _this->waterfallBookmarks) {
-                double centerXpos = args.min.x + std::round((bm.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
+            for (auto& group : groups) {
+                for (int i = 0; i < group.vec_labels.size(); i++) {
+                    auto& label = group.vec_labels.at(i);
 
-                if (bm.bookmark.frequency >= args.lowFreq && bm.bookmark.frequency <= args.highFreq) {
-                    args.window->DrawList->AddLine(ImVec2(centerXpos, args.min.y), ImVec2(centerXpos, args.max.y), IM_COL32(255, 255, 0, 255));
-                }
+                    ImVec4 bookMarkColor = ImVec4(label.ptr_bm->bookmark.color[0], label.ptr_bm->bookmark.color[1], label.ptr_bm->bookmark.color[2], 1.0f);
 
-                ImVec2 nameSize = ImGui::CalcTextSize(bm.bookmarkName.c_str());
-                ImVec2 rectMin = ImVec2(centerXpos - (nameSize.x / 2) - 5, args.max.y - nameSize.y);
-                ImVec2 rectMax = ImVec2(centerXpos + (nameSize.x / 2) + 5, args.max.y);
-                ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y);
-                ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y);
+                    float labelSizeX = label.maxX - label.minX;
+                    double centerXpos = label.minX + (labelSizeX) / 2.0f;
 
-                if (clampedRectMax.x - clampedRectMin.x > 0) {
-                    args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, IM_COL32(255, 255, 0, 255));
-                }
-                if (rectMin.x >= args.min.x && rectMax.x <= args.max.x) {
-                    args.window->DrawList->AddText(ImVec2(centerXpos - (nameSize.x / 2), args.max.y - nameSize.y), IM_COL32(0, 0, 0, 255), bm.bookmarkName.c_str());
+                    float nameSizeY = ImGui::GetTextLineHeight();
+
+                    ImVec2 rectMin = ImVec2(label.minX, args.max.y - nameSizeY * (i + 1));
+                    ImVec2 rectMax = ImVec2(label.maxX, args.max.y - nameSizeY * i);
+
+                    ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y);
+                    ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y);
+
+                    if (label.ptr_bm->bookmark.frequency >= args.lowFreq && label.ptr_bm->bookmark.frequency <= args.highFreq) {
+                        args.window->DrawList->AddLine(ImVec2(centerXpos, args.min.y), ImVec2(centerXpos, clampedRectMin.y), ImGui::ColorConvertFloat4ToU32(bookMarkColor));
+                    }
+                    if (clampedRectMax.x - clampedRectMin.x > 0) {
+                        args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, ImGui::ColorConvertFloat4ToU32(bookMarkColor));
+                    }
+                    if (rectMin.x >= args.min.x && rectMax.x <= args.max.x) {
+                        args.window->DrawList->AddText(ImVec2(rectMin.x + bookmarkNameTextPadding, rectMin.y), IM_COL32(0, 0, 0, 255), label.ptr_bm->bookmarkName.c_str());
+                    }
                 }
             }
         }
