@@ -16,12 +16,13 @@
 
 //TODO: Add bookmark list color (Displayed as ribbon on bookmark label)
 //TODO: Improve frequency manager menu UI
+//TODO: Handle group size exceeded
 
 SDRPP_MOD_INFO{
     /* Name:            */ "frequency_manager",
     /* Description:     */ "Frequency manager module for SDR++",
-    /* Author:          */ "Ryzerth;Zimm",
-    /* Version:         */ 0, 3, 0,
+    /* Author:          */ "Ryzerth;Zimm;Bas-W",
+    /* Version:         */ 0, 3, 1,
     /* Max instances    */ 1
 };
 
@@ -68,6 +69,7 @@ constexpr ImU32 bookmarkHoveredHighlightColor = IM_COL32(220, 220, 220, 200);
 constexpr float bookmarkNameTextPadding = 5.0f;
 constexpr float bookmarkLabelRounding = 5.0f;
 constexpr float bookmarkHoveredOutlineThickness = 2.0f;
+
 constexpr float bookmarkGroupPadding = 1.0f;
 
 class FrequencyManagerModule : public ModuleManager::Instance {
@@ -710,7 +712,7 @@ private:
 
         _this->anyLabelHovered = false;
 
-        bool btnDwn = _this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_TOP;
+        bool bookmarksAlignTop = _this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_TOP;
 
         // Draw bookmarks
         for (auto& group : groups) {
@@ -727,7 +729,7 @@ private:
                 ImVec2 rectMin;
                 ImVec2 rectMax;
 
-                if (btnDwn) {
+                if (bookmarksAlignTop) {
                     rectMin = ImVec2(label.minX, args.min.y + (nameSizeY + bookmarkGroupPadding) * i);
                     rectMax = ImVec2(label.maxX, args.min.y + nameSizeY * (i + 1) + bookmarkGroupPadding * i);
                 }
@@ -736,11 +738,13 @@ private:
                     rectMax = ImVec2(label.maxX, args.max.y - (nameSizeY + bookmarkGroupPadding) * i);
                 }
 
+                if (rectMax.y > args.max.y) {break;}
+
                 ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y);
                 ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y);
 
-                ImVec2 lineMarkerMin = ImVec2(centerXpos, btnDwn ? clampedRectMax.y : args.min.y);
-                ImVec2 lineMarkerMax = ImVec2(centerXpos, btnDwn ? args.max.y : clampedRectMin.y);
+                ImVec2 lineMarkerMin = ImVec2(centerXpos, bookmarksAlignTop ? clampedRectMax.y : args.min.y);
+                ImVec2 lineMarkerMax = ImVec2(centerXpos, bookmarksAlignTop ? args.max.y : clampedRectMin.y);
 
                 // Draw label rect
                 args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, ImGui::ColorConvertFloat4ToU32(bookMarkColor), bookmarkLabelRounding);
