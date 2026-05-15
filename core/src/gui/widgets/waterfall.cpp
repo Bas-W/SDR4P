@@ -144,7 +144,7 @@ namespace ImGui {
 
         // Horizontal scale
         double startFreq = ceilf(lowerFreq / range) * range;
-        double horizScale = (double)dataWidth / viewBandwidth;
+        horizScale = (double)dataWidth / viewBandwidth;
         float scaleVOfsset = 7 * style::uiScale;
         for (double freq = startFreq; freq < upperFreq; freq += range) {
             double xPos = fftAreaMin.x + ((freq - lowerFreq) * horizScale);
@@ -185,6 +185,16 @@ namespace ImGui {
             }
         }
 
+        // X Axis
+        window->DrawList->AddLine(ImVec2(fftAreaMin.x, fftAreaMax.y),
+                                  ImVec2(fftAreaMax.x, fftAreaMax.y),
+                                  text, style::uiScale);
+        // Y Axis
+        window->DrawList->AddLine(ImVec2(fftAreaMin.x, fftAreaMin.y),
+                                  ImVec2(fftAreaMin.x, fftAreaMax.y - 1),
+                                  text, style::uiScale);
+    }
+    void WaterFall::emitFFTRedraw() {
         FFTRedrawArgs args;
         args.min = fftAreaMin;
         args.max = fftAreaMax;
@@ -194,15 +204,6 @@ namespace ImGui {
         args.pixelToFreqRatio = viewBandwidth / (double)dataWidth;
         args.window = window;
         onFFTRedraw.emit(args);
-
-        // X Axis
-        window->DrawList->AddLine(ImVec2(fftAreaMin.x, fftAreaMax.y),
-                                  ImVec2(fftAreaMax.x, fftAreaMax.y),
-                                  text, style::uiScale);
-        // Y Axis
-        window->DrawList->AddLine(ImVec2(fftAreaMin.x, fftAreaMin.y),
-                                  ImVec2(fftAreaMin.x, fftAreaMax.y - 1),
-                                  text, style::uiScale);
     }
 
     void WaterFall::drawWaterfall() {
@@ -853,6 +854,7 @@ namespace ImGui {
             drawWaterfall();
         }
         drawVFOs();
+        emitFFTRedraw();
         if (bandplan != NULL && bandplanVisible) {
             drawBandPlan();
         }

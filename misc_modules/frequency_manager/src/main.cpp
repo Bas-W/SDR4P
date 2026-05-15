@@ -344,7 +344,6 @@ private:
             WaterfallBookmark wbm;
             wbm.listName = listName;
             for (auto [bookmarkName, bm] : config.conf["lists"][listName]["bookmarks"].items()) {
-                flog::debug("loading bookmark {}", bookmarkName.c_str());
                 wbm.bookmarkName = bookmarkName;
                 wbm.bookmark = parseBookmark(bm);
                 waterfallBookmarks.push_back(wbm);
@@ -374,7 +373,6 @@ private:
         selectedListName = listName;
         config.acquire();
         for (const auto& [bookmarkName, bm] : config.conf["lists"][listName]["bookmarks"].items()) {
-            flog::debug("loading bookmark {}", bookmarkName.c_str());
             bookmarks[bookmarkName] = parseBookmark(bm);
         }
         config.release();
@@ -488,7 +486,7 @@ private:
                 }
             }
 
-             memcpy(_this->editedBookmark.color, bookmarkDefaultColor, std::size(bookmarkDefaultColor));
+             memcpy(_this->editedBookmark.color, bookmarkDefaultColor, sizeof(bookmarkDefaultColor));
 
             _this->editedBookmark.selected = false;
 
@@ -665,6 +663,8 @@ private:
         float maxX;
     };
 
+    // TODO: ImGui color alpha channel overrides may be incorrect
+    // TODO: Dont draw indicator of selected (tuned) bookmark
     static void fftRedraw(ImGui::WaterFall::FFTRedrawArgs args, void* ctx) {
         FrequencyManagerModule* _this = (FrequencyManagerModule*)ctx;
         if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_OFF) { return; }
@@ -677,8 +677,8 @@ private:
             double centerXpos = args.min.x + std::round((bm.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
 
             ImVec2 nameSize = ImGui::CalcTextSize(bm.bookmarkName.c_str());
-            float rectMinX = centerXpos - (nameSize.x / 2) - bookmarkNameTextPadding;
-            float rectMaxX = centerXpos + (nameSize.x / 2) + bookmarkNameTextPadding;
+            float rectMinX = centerXpos - (nameSize.x / 2) - bookmarkNameTextPadding * style::uiScale;
+            float rectMaxX = centerXpos + (nameSize.x / 2) + bookmarkNameTextPadding * style::uiScale;
 
             if (rectMaxX > args.min.x && rectMinX < args.max.x) {
                 visibleLabels.push_back({ &bm, rectMinX, rectMaxX });
@@ -700,7 +700,7 @@ private:
             for (auto it = visibleLabels.begin() + 1; it != visibleLabels.end(); ++it) {
                 auto& label = *it;
 
-                if (label.minX <= groups.back().maxX + bookmarkGroupPadding) {
+                if (label.minX <= groups.back().maxX + bookmarkGroupPadding * style::uiScale) {
                     groups.back().vec_labels.push_back(label);
                     groups.back().maxX = std::max(groups.back().maxX, label.maxX);
                 }
@@ -730,12 +730,13 @@ private:
                 ImVec2 rectMax;
 
                 if (bookmarksAlignTop) {
-                    rectMin = ImVec2(label.minX, args.min.y + (nameSizeY + bookmarkGroupPadding) * i);
-                    rectMax = ImVec2(label.maxX, args.min.y + nameSizeY * (i + 1) + bookmarkGroupPadding * i);
+                    float vfoZoneOffset = bookmarkGroupPadding * style::uiScale * 5.0f;
+                    rectMin = ImVec2(label.minX, gui::waterfall.vfoZoneMax.y + vfoZoneOffset + (nameSizeY + bookmarkGroupPadding * style::uiScale) * i);
+                    rectMax = ImVec2(label.maxX, gui::waterfall.vfoZoneMax.y + vfoZoneOffset + nameSizeY * (i + 1) + bookmarkGroupPadding * style::uiScale * i);
                 }
                 else {
-                    rectMin = ImVec2(label.minX, args.max.y - nameSizeY * (i + 1) - bookmarkGroupPadding * i);
-                    rectMax = ImVec2(label.maxX, args.max.y - (nameSizeY + bookmarkGroupPadding) * i);
+                    rectMin = ImVec2(label.minX, args.max.y - nameSizeY * (i + 1) - bookmarkGroupPadding * style::uiScale * i);
+                    rectMax = ImVec2(label.maxX, args.max.y - (nameSizeY + bookmarkGroupPadding * style::uiScale) * i);
                 }
 
                 if (rectMax.y > args.max.y) {break;}
@@ -758,7 +759,7 @@ private:
                     // Line marker outline
                     args.window->DrawList->AddRectFilled(
                         ImVec2(std::clamp<double>(centerXpos - bookmarkHoveredOutlineThickness, args.min.x, args.max.x), lineMarkerMin.y),
-                        ImVec2(std::clamp<double>(centerXpos + bookmarkHoveredOutlineThickness, args.min.x, args.max.x), lineMarkerMax.y),
+                        ImVec2(std::clamp<double>(centerXpos + bookmarkHoveredOutlineThickness + 1, args.min.x, args.max.x), lineMarkerMax.y),
                         bookmarkHoveredHighlightColor);
 
                     // Label rect highlight
@@ -781,7 +782,7 @@ private:
 
                 // Draw text
                 if (rectMin.x >= args.min.x && rectMax.x <= args.max.x) {
-                    args.window->DrawList->AddText(ImVec2(rectMin.x + bookmarkNameTextPadding, rectMin.y), bookmarkTextColor, label.ptr_bm->bookmarkName.c_str());
+                    args.window->DrawList->AddText(ImVec2(rectMin.x + bookmarkNameTextPadding * style::uiScale, rectMin.y), bookmarkTextColor, label.ptr_bm->bookmarkName.c_str());
                 }
             }
         }
