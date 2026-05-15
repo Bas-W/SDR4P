@@ -1,5 +1,4 @@
 #pragma once
-#include <vector>
 #include <mutex>
 #include <gui/widgets/bandplan.h>
 #include <imgui/imgui.h>
@@ -7,10 +6,23 @@
 #include <utils/event.h>
 
 #include <utils/opengl_include_code.h>
+#include <gui/style.h>
 
 #define WATERFALL_RESOLUTION 1000000
 
 namespace ImGui {
+    constexpr ImU32 VFO_TextColLight = IM_COL32(225, 225, 225, 255);
+    constexpr ImU32 VFO_TextColDark = IM_COL32(50, 50, 50, 255);
+    constexpr ImU32 VFO_TextBgCol = IM_COL32(50, 50, 50, 200);
+    constexpr ImU32 VFO_HoverCol = IM_COL32(200, 200, 200, 180);
+    constexpr ImU32 VFO_HighlightCol = IM_COL32(225, 225, 225, 200);
+    constexpr ImU32 VFO_DefaultSelectedLineCol = IM_COL32(255, 0, 0, 255);
+    constexpr ImU32 VFO_DefaultUnselectedLineCol = IM_COL32(255, 255, 0, 255);
+    constexpr float VFO_DefaultNametagPadding = 3.0f;
+    constexpr float VFO_DefaultLineSegLength = 15.0f;
+
+    void drawDottedLineVert(ImGuiWindow* window, ImVec2 start, ImVec2 end, ImU32 color, float lineSegLength = VFO_DefaultLineSegLength, float thickness = style::uiScale);
+
     class WaterfallVFO {
     public:
         void setOffset(double offset);
@@ -20,6 +32,7 @@ namespace ImGui {
         void setSnapInterval(double interval);
         void setNotchOffset(double offset);
         void setNotchVisible(bool visible);
+        bool isHovered();
         void updateDrawingVars(double viewBandwidth, float dataWidth, double viewOffset, ImVec2 widgetPos, int fftHeight); // NOTE: Datawidth double???
         void draw(ImGuiWindow* window, bool selected);
 
@@ -44,6 +57,12 @@ namespace ImGui {
         bool leftClamped;
         bool rightClamped;
 
+        std::string name;
+        ImVec2 nameSize;
+        ImVec2 nameTextStart;
+        ImVec2 nameTextEnd;
+        ImVec2 nameTagStart;
+        ImVec2 nameTagEnd;
         ImVec2 rectMin;
         ImVec2 rectMax;
         ImVec2 lineMin;
@@ -217,6 +236,8 @@ namespace ImGui {
         ImVec2 freqAreaMax;
         ImVec2 wfMin;
         ImVec2 wfMax;
+        ImVec2 vfoZoneMin;
+        ImVec2 vfoZoneMax;
 
     private:
         void drawWaterfall();

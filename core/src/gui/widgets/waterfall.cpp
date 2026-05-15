@@ -214,19 +214,11 @@ namespace ImGui {
             std::lock_guard<std::mutex> lck(texMtx);
             window->DrawList->AddImage((void*)(intptr_t)textureId, wfMin, wfMax);
         }
-        
-        ImVec2 mPos = ImGui::GetMousePos();
-
-        if (IS_IN_AREA(mPos, wfMin, wfMax) && !gui::mainWindow.lockWaterfallControls && !inputHandled) {
-            for (auto const& [name, vfo] : vfos) {
-                window->DrawList->AddRectFilled(vfo->wfRectMin, vfo->wfRectMax, vfo->color);
-                if (!vfo->lineVisible) { continue; }
-                window->DrawList->AddLine(vfo->wfLineMin, vfo->wfLineMax, (name == selectedVFO) ? IM_COL32(255, 0, 0, 255) : IM_COL32(255, 255, 0, 255), style::uiScale);
-            }
-        }
     }
 
     void WaterFall::drawVFOs() {
+        vfoZoneMin = ImVec2(fftAreaMin.x, fftAreaMin.y);
+        vfoZoneMax = vfoZoneMin;
         for (auto const& [name, vfo] : vfos) {
             vfo->draw(window, name == selectedVFO);
         }
@@ -273,7 +265,7 @@ namespace ImGui {
 
         std::string hoveredVFOName = "";
         for (auto const& [name, _vfo] : vfos) {
-            if (ImGui::IsMouseHoveringRect(_vfo->rectMin, _vfo->rectMax) || ImGui::IsMouseHoveringRect(_vfo->wfRectMin, _vfo->wfRectMax)) {
+            if (_vfo->isHovered()) {
                 hoveredVFOName = name;
                 break;
             }
@@ -477,7 +469,7 @@ namespace ImGui {
         else if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
             // Check if a VFO is hovered. If yes, show tooltip
             for (auto const& [name, _vfo] : vfos) {
-                if (ImGui::IsMouseHoveringRect(_vfo->rectMin, _vfo->rectMax) || ImGui::IsMouseHoveringRect(_vfo->wfRectMin, _vfo->wfRectMax)) {
+                if (_vfo->isHovered()) {
                     char buf[128];
                     ImGui::BeginTooltip();
 
@@ -1118,6 +1110,7 @@ namespace ImGui {
     void WaterFall::updateAllVFOs(bool checkRedrawRequired) {
         for (auto const& [name, vfo] : vfos) {
             if (checkRedrawRequired && !vfo->redrawRequired) { continue; }
+            vfo->name = name;
             vfo->updateDrawingVars(viewBandwidth, dataWidth, viewOffset, widgetPos, fftHeight);
             vfo->wfRectMin = ImVec2(vfo->rectMin.x, wfMin.y);
             vfo->wfRectMax = ImVec2(vfo->rectMax.x, wfMax.y);
@@ -1216,6 +1209,16 @@ namespace ImGui {
         latestFFTMtx.unlock();
     }
 
+    void drawDottedLineVert(ImGuiWindow* window, ImVec2 start, ImVec2 end, ImU32 color, float lineSegLength, float thickness) {
+        int lineSegCount = ceilf((end.y - start.y) / VFO_DefaultLineSegLength);
+        for (int i = 0; i < lineSegCount; i++) {
+            float yStart = start.y + i * lineSegLength;
+            float yEnd = std::clamp(yStart + lineSegLength / 2.0f, 0.0f, end.y);
+
+            window->DrawList->AddLine(ImVec2(start.x, yStart), ImVec2(start.x, yEnd), color, thickness);
+        }
+    }
+
     void WaterfallVFO::setOffset(double offset) {
         generalOffset = offset;
         if (reference == REF_CENTER) {
@@ -1298,6 +1301,11 @@ namespace ImGui {
         notchVisible = visible;
         redrawRequired = true;
     }
+    bool WaterfallVFO::isHovered() {
+        return ImGui::IsMouseHoveringRect(rectMin, rectMax) ||
+               ImGui::IsMouseHoveringRect(wfRectMin, wfRectMax) ||
+               ImGui::IsMouseHoveringRect(nameTagStart, nameTagEnd);
+    }
 
     void WaterfallVFO::updateDrawingVars(double viewBandwidth, float dataWidth, double viewOffset, ImVec2 widgetPos, int fftHeight) {
         int center = roundf((((centerOffset - viewOffset) / (viewBandwidth / 2.0)) + 1.0) * ((double)dataWidth / 2.0));
@@ -1320,18 +1328,34 @@ namespace ImGui {
         }
 
         // Calculate the position of the line
-        if (reference == REF_LOWER) {
-            lineMin = ImVec2(gui::waterfall.fftAreaMin.x + left, gui::waterfall.fftAreaMin.y);
-            lineMax = ImVec2(gui::waterfall.fftAreaMin.x + left, gui::waterfall.fftAreaMax.y - 1);
+        float xOffset = 0.0f;
+        switch (reference) {
+        case REF_LOWER:
+            xOffset = left;
+            break;
+        case REF_CENTER:
+            xOffset = center;
+            break;
+        case REF_UPPER:
+            xOffset = right;
+            break;
+        default:
+            xOffset = center;
         }
-        else if (reference == REF_CENTER) {
-            lineMin = ImVec2(gui::waterfall.fftAreaMin.x + center, gui::waterfall.fftAreaMin.y);
-            lineMax = ImVec2(gui::waterfall.fftAreaMin.x + center, gui::waterfall.fftAreaMax.y - 1);
-        }
-        else if (reference == REF_UPPER) {
-            lineMin = ImVec2(gui::waterfall.fftAreaMin.x + right, gui::waterfall.fftAreaMin.y);
-            lineMax = ImVec2(gui::waterfall.fftAreaMin.x + right, gui::waterfall.fftAreaMax.y - 1);
-        }
+
+        nameSize = ImGui::CalcTextSize(name.c_str());
+        nameTagStart = ImVec2(std::clamp<float>(
+                               gui::waterfall.fftAreaMin.x + xOffset - nameSize.x / 2.0f - style::uiScale * VFO_DefaultNametagPadding,
+                               gui::waterfall.fftAreaMin.x,
+                               gui::waterfall.fftAreaMax.x - nameSize.x - style::uiScale * VFO_DefaultNametagPadding * 2.0f),
+                           gui::waterfall.fftAreaMin.y);
+        nameTagEnd = ImVec2(nameTagStart.x + nameSize.x + style::uiScale * VFO_DefaultNametagPadding * 2.0f, nameTagStart.y + nameSize.y + style::uiScale * VFO_DefaultNametagPadding * 2.0f);
+
+        nameTextStart = ImVec2(nameTagStart.x + style::uiScale * VFO_DefaultNametagPadding, nameTagStart.y + style::uiScale * VFO_DefaultNametagPadding);
+        nameTextEnd = ImVec2(nameTagStart.x - style::uiScale * VFO_DefaultNametagPadding, nameTagStart.y - style::uiScale * VFO_DefaultNametagPadding);
+
+        lineMin = ImVec2(gui::waterfall.fftAreaMin.x + xOffset, nameTagEnd.y + style::uiScale * 2.0f);
+        lineMax = ImVec2(gui::waterfall.fftAreaMin.x + xOffset, gui::waterfall.fftAreaMax.y - 1);
 
         int _left = left;
         int _right = right;
@@ -1340,8 +1364,8 @@ namespace ImGui {
         leftClamped = (left != _left);
         rightClamped = (right != _right);
 
-        rectMin = ImVec2(gui::waterfall.fftAreaMin.x + left, gui::waterfall.fftAreaMin.y + 1);
-        rectMax = ImVec2(gui::waterfall.fftAreaMin.x + right + 1, gui::waterfall.fftAreaMax.y);
+        rectMin = ImVec2(gui::waterfall.fftAreaMin.x + left, gui::waterfall.fftAreaMin.y);
+        rectMax = ImVec2(gui::waterfall.fftAreaMin.x + right + 1, lineMax.y);
 
         float gripSize = 2.0f * style::uiScale;
         lbwSelMin = ImVec2(rectMin.x - gripSize, rectMin.y);
@@ -1349,37 +1373,85 @@ namespace ImGui {
         rbwSelMin = ImVec2(rectMax.x - gripSize, rectMin.y);
         rbwSelMax = ImVec2(rectMax.x + gripSize, rectMax.y);
 
-        notchMin = ImVec2(gui::waterfall.fftAreaMin.x + notch - gripSize, gui::waterfall.fftAreaMin.y);
-        notchMax = ImVec2(gui::waterfall.fftAreaMin.x + notch + gripSize, gui::waterfall.fftAreaMax.y - 1);
+        notchMin = ImVec2(gui::waterfall.fftAreaMin.x + notch - gripSize, lineMin.y);
+        notchMax = ImVec2(gui::waterfall.fftAreaMin.x + notch + gripSize, lineMax.y);
     }
 
     void WaterfallVFO::draw(ImGuiWindow* window, bool selected) {
-        window->DrawList->AddRectFilled(rectMin, rectMax, color);
+        ImVec2 mousePos = ImGui::GetMousePos();
+
+        bool hovered = false;
+        bool bwLoEdgeHvd = false;
+        bool bwHiEdgeHvd = false;
+        bool mouseInWf = false;
+
+        if (!gui::mainWindow.lockWaterfallControls && !gui::waterfall.inputHandled) {
+            hovered = isHovered() & !ImGui::IsMouseDown(ImGuiMouseButton_Left);
+            mouseInWf = IS_IN_AREA(mousePos, gui::waterfall.wfMin, gui::waterfall.wfMax);
+            if (!rectMax.x - rectMin.x < 10) {
+                if (reference != REF_LOWER && !bandwidthLocked && !leftClamped) {
+                    if (IS_IN_AREA(mousePos, lbwSelMin, lbwSelMax) || IS_IN_AREA(mousePos, wfLbwSelMin, wfLbwSelMax)) {
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                        bwLoEdgeHvd = true;
+                    }
+                }
+                if (reference != REF_UPPER && !bandwidthLocked && !rightClamped) {
+                    if (IS_IN_AREA(mousePos, rbwSelMin, rbwSelMax) || IS_IN_AREA(mousePos, wfRbwSelMin, wfRbwSelMax)) {
+                        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+                        bwHiEdgeHvd = true;
+                    }
+                }
+            }
+        }
+
+        // Bandwidth indicator
+        ImU32 rectCol = hovered ? color : (color & ~IM_COL32_A_MASK) | ((((color & IM_COL32_A_MASK) >> IM_COL32_A_SHIFT) / 2) << IM_COL32_A_SHIFT);
+        window->DrawList->AddRectFilled(rectMin, rectMax, rectCol);
+
+        // Edge indicators
+        drawDottedLineVert(window, ImVec2(rectMin.x, rectMin.y), ImVec2(rectMin.x, rectMax.y),
+            (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+        drawDottedLineVert(window, ImVec2(rectMax.x, rectMin.y), ImVec2(rectMax.x, rectMax.y),
+            (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+
+        if (mouseInWf) {
+            window->DrawList->AddRectFilled(wfRectMin, wfRectMax, rectCol);
+            drawDottedLineVert(window, ImVec2(wfRectMin.x, wfRectMin.y), ImVec2(wfRectMin.x, wfRectMax.y),
+                (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+            drawDottedLineVert(window, ImVec2(wfRectMax.x, wfRectMin.y), ImVec2(wfRectMax.x, wfRectMax.y),
+                (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+        }
+
         if (lineVisible) {
-            window->DrawList->AddLine(lineMin, lineMax, selected ? IM_COL32(255, 0, 0, 255) : IM_COL32(255, 255, 0, 255), style::uiScale);
+            // VFO line
+            window->DrawList->AddLine(lineMin, lineMax, selected ? VFO_DefaultSelectedLineCol : VFO_DefaultUnselectedLineCol, style::uiScale);
+            if (mouseInWf) {
+                window->DrawList->AddLine(wfLineMin, wfLineMax, selected ? VFO_DefaultSelectedLineCol : VFO_DefaultUnselectedLineCol, style::uiScale);
+            }
+
+            // Nametag
+            window->DrawList->AddRectFilled(nameTagStart, nameTagEnd, color | (0xff << IM_COL32_A_SHIFT), style::uiScale * 2.0f);
+            window->DrawList->AddRectFilled(
+                ImVec2(nameTagStart.x + style::uiScale * 2.0f,
+                       nameTagStart.y + style::uiScale * 2.0f),
+                ImVec2(nameTagEnd.x - style::uiScale * 2.0f, nameTagEnd.y - style::uiScale * 2.0f),
+                hovered ? VFO_HoverCol : VFO_TextBgCol,
+                style::uiScale * 2.0f);
+
+            // Indicator
+            ImVec2 selectIndStart = ImVec2(nameTagStart.x, nameTagEnd.y + style::uiScale * 2.0f);
+            ImVec2 selectIndEnd = ImVec2(nameTagEnd.x, nameTagEnd.y + style::uiScale * (selected ? 6.0f : 4.0f));
+            if (selectIndEnd.y > gui::waterfall.vfoZoneMax.y) { gui::waterfall.vfoZoneMax.y = selectIndEnd.y; }
+            window->DrawList->AddRectFilled(selectIndStart, selectIndEnd, selected ? VFO_DefaultSelectedLineCol : VFO_DefaultUnselectedLineCol);
+
+            // Name
+            window->DrawList->AddText(nameTextStart, hovered ? VFO_TextColDark : VFO_TextColLight, name.c_str());
         }
 
         if (notchVisible) {
             window->DrawList->AddRectFilled(notchMin, notchMax, IM_COL32(255, 0, 0, 127));
         }
-
-        if (!gui::mainWindow.lockWaterfallControls && !gui::waterfall.inputHandled) {
-            ImVec2 mousePos = ImGui::GetMousePos();
-            if (rectMax.x - rectMin.x < 10) { return; }
-            if (reference != REF_LOWER && !bandwidthLocked && !leftClamped) {
-                if (IS_IN_AREA(mousePos, lbwSelMin, lbwSelMax)) { ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW); }
-                else if (IS_IN_AREA(mousePos, wfLbwSelMin, wfLbwSelMax)) {
-                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-                }
-            }
-            if (reference != REF_UPPER && !bandwidthLocked && !rightClamped) {
-                if (IS_IN_AREA(mousePos, rbwSelMin, rbwSelMax)) { ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW); }
-                else if (IS_IN_AREA(mousePos, wfRbwSelMin, wfRbwSelMax)) {
-                    ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-                }
-            }
-        }
-    };
+    }
 
     void WaterFall::showWaterfall() {
         buf_mtx.lock();

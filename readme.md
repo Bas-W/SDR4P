@@ -6,8 +6,7 @@ SDR++ is a cross-platform and open source SDR software with the aim of being blo
 
 # Goal
 
-I want to make some expansions and UI/UX improvements for the included modules in SDR++.
-This fork serves as a way to do this.
+This fork serves a place to keep my modifications, mostly UI/UX related, to SDR++.  
 
 The intention is not to make large, breaking changes to the codebase.
 It should remain close the upstream and any new upstream functionality should be mirrored here.
