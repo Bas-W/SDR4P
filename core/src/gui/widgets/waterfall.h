@@ -242,6 +242,7 @@ namespace ImGui {
     private:
         void drawWaterfall();
         void drawFFT();
+        void emitFFTRedraw();
         void drawVFOs();
         void drawBandPlan();
         void processInputs();
@@ -287,6 +288,7 @@ namespace ImGui {
         double lowerFreq;
         double upperFreq;
         double range;
+        double horizScale;
 
         float lastDrag;
 

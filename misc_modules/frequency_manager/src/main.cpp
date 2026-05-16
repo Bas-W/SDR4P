@@ -15,11 +15,15 @@
 #include <fstream>
 #include "Tracy.hpp"
 
+//TODO: Add bookmark list color (Displayed as ribbon on bookmark label)
+//TODO: Improve frequency manager menu UI
+//TODO: Handle group size exceeded
+
 SDRPP_MOD_INFO{
     /* Name:            */ "frequency_manager",
     /* Description:     */ "Frequency manager module for SDR++",
-    /* Author:          */ "Ryzerth;Zimm",
-    /* Version:         */ 0, 3, 0,
+    /* Author:          */ "Ryzerth;Zimm;Bas-W",
+    /* Version:         */ 0, 3, 1,
     /* Max instances    */ 1
 };
 
@@ -27,6 +31,7 @@ struct FrequencyBookmark {
     double frequency;
     double bandwidth;
     int mode;
+    float color[3];
     bool selected;
 };
 
@@ -59,9 +64,21 @@ enum {
 };
 
 const char* bookmarkDisplayModesTxt = "Off\0Top\0Bottom\0";
+constexpr float bookmarkDefaultColor[3] = {1.0f, 1.0f, 0.0f};
+constexpr ImU32 bookmarkTextColor = IM_COL32(25, 25, 25, 255);
+constexpr ImU32 bookmarkHoveredHighlightColor = IM_COL32(220, 220, 220, 200);
+constexpr float bookmarkNameTextPadding = 5.0f;
+constexpr float bookmarkLabelRounding = 5.0f;
+constexpr float bookmarkHoveredOutlineThickness = 2.0f;
+
+constexpr float bookmarkGroupPadding = 1.0f;
 
 class FrequencyManagerModule : public ModuleManager::Instance {
 public:
+    bool anyLabelHovered = false;
+    WaterfallBookmark hoveredBookmark;
+    std::string hoveredBookmarkName;
+
     FrequencyManagerModule(std::string name) {
         this->name = name;
 
@@ -128,6 +145,34 @@ private:
         }
     }
 
+    static FrequencyBookmark parseBookmark(const json& bm) {
+        FrequencyBookmark fbm;
+
+        try {
+            fbm.frequency = bm.value("frequency", 0.0);
+            fbm.bandwidth = bm.value("bandwidth", 0.0);
+            fbm.mode = bm.value("mode", 0);
+        } catch (json::exception& e) {
+            flog::error("Error loading bookmark data: {}", e.what());
+        }
+
+        memcpy(fbm.color, bookmarkDefaultColor, sizeof(bookmarkDefaultColor));
+
+        try {
+            if (bm.contains("color") && bm["color"].is_object()) {
+                const auto& c = bm["color"];
+                fbm.color[0] = c.value("r", bookmarkDefaultColor[0]);
+                fbm.color[1] = c.value("g", bookmarkDefaultColor[1]);
+                fbm.color[2] = c.value("b", bookmarkDefaultColor[2]);
+            }
+        } catch (json::exception& e) {
+            flog::error("Error loading bookmark color: {}", e.what());
+        }
+
+        fbm.selected = false;
+        return fbm;
+    }
+
     bool bookmarkEditDialog() {
         ZoneScoped;
         bool open = true;
@@ -172,6 +217,13 @@ private:
             ImGui::SetNextItemWidth(200);
 
             ImGui::Combo(("##freq_manager_edit_mode" + name).c_str(), &editedBookmark.mode, demodModeListTxt);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::LeftLabel("Color");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::SetNextItemWidth(200);
+            ImGui::ColorEdit3("##freq_manager_edit_color", editedBookmark.color, ImGuiColorEditFlags_DisplayRGB);
 
             ImGui::EndTable();
 
@@ -305,10 +357,7 @@ private:
             wbm.listName = listName;
             for (auto [bookmarkName, bm] : config.conf["lists"][listName]["bookmarks"].items()) {
                 wbm.bookmarkName = bookmarkName;
-                wbm.bookmark.frequency = config.conf["lists"][listName]["bookmarks"][bookmarkName]["frequency"];
-                wbm.bookmark.bandwidth = config.conf["lists"][listName]["bookmarks"][bookmarkName]["bandwidth"];
-                wbm.bookmark.mode = config.conf["lists"][listName]["bookmarks"][bookmarkName]["mode"];
-                wbm.bookmark.selected = false;
+                wbm.bookmark = parseBookmark(bm);
                 waterfallBookmarks.push_back(wbm);
             }
         }
@@ -337,14 +386,8 @@ private:
         selectedListId = std::distance(listNames.begin(), std::find(listNames.begin(), listNames.end(), listName));
         selectedListName = listName;
         config.acquire();
-        for (auto [bmName, bm] : config.conf["lists"][listName]["bookmarks"].items()) {
-            ZoneScopedN("loadByName_loadItem");
-            FrequencyBookmark fbm;
-            fbm.frequency = bm["frequency"];
-            fbm.bandwidth = bm["bandwidth"];
-            fbm.mode = bm["mode"];
-            fbm.selected = false;
-            bookmarks[bmName] = fbm;
+        for (const auto& [bookmarkName, bm] : config.conf["lists"][listName]["bookmarks"].items()) {
+            bookmarks[bookmarkName] = parseBookmark(bm);
         }
         config.release();
     }
@@ -358,6 +401,9 @@ private:
             config.conf["lists"][listName]["bookmarks"][bmName]["frequency"] = bm.frequency;
             config.conf["lists"][listName]["bookmarks"][bmName]["bandwidth"] = bm.bandwidth;
             config.conf["lists"][listName]["bookmarks"][bmName]["mode"] = bm.mode;
+            config.conf["lists"][listName]["bookmarks"][bmName]["color"]["r"] = bm.color[0];
+            config.conf["lists"][listName]["bookmarks"][bmName]["color"]["g"] = bm.color[1];
+            config.conf["lists"][listName]["bookmarks"][bmName]["color"]["b"] = bm.color[2];
         }
         refreshWaterfallBookmarks(false);
         config.release(true);
@@ -456,6 +502,8 @@ private:
                     _this->editedBookmark.mode = mode;
                 }
             }
+
+             memcpy(_this->editedBookmark.color, bookmarkDefaultColor, sizeof(bookmarkDefaultColor));
 
             _this->editedBookmark.selected = false;
 
@@ -620,52 +668,139 @@ private:
         }
     }
 
+    struct BookmarkLabel {
+        WaterfallBookmark* ptr_bm;
+        float minX;
+        float maxX;
+    };
+
+    struct BookmarkGroup {
+        std::vector<BookmarkLabel> vec_labels;
+        float minX;
+        float maxX;
+    };
+
+    // TODO: ImGui color alpha channel overrides may be incorrect
+    // TODO: Dont draw indicator of selected (tuned) bookmark
     static void fftRedraw(ImGui::WaterFall::FFTRedrawArgs args, void* ctx) {
         ZoneScoped;
         FrequencyManagerModule* _this = (FrequencyManagerModule*)ctx;
         if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_OFF) { return; }
+        if (_this->waterfallBookmarks.empty()) { return; }
 
-        if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_TOP) {
-            for (auto const bm : _this->waterfallBookmarks) {
-                double centerXpos = args.min.x + std::round((bm.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
+        std::vector<BookmarkLabel> visibleLabels;
 
-                if (bm.bookmark.frequency >= args.lowFreq && bm.bookmark.frequency <= args.highFreq) {
-                    args.window->DrawList->AddLine(ImVec2(centerXpos, args.min.y), ImVec2(centerXpos, args.max.y), IM_COL32(255, 255, 0, 255));
+        // Filter visible bookmarks
+        for (auto& bm : _this->waterfallBookmarks) {
+            double centerXpos = args.min.x + std::round((bm.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
+
+            ImVec2 nameSize = ImGui::CalcTextSize(bm.bookmarkName.c_str());
+            float rectMinX = centerXpos - (nameSize.x / 2) - bookmarkNameTextPadding * style::uiScale;
+            float rectMaxX = centerXpos + (nameSize.x / 2) + bookmarkNameTextPadding * style::uiScale;
+
+            if (rectMaxX > args.min.x && rectMinX < args.max.x) {
+                visibleLabels.push_back({ &bm, rectMinX, rectMaxX });
+            }
+        }
+
+        if (visibleLabels.empty()) { return; }
+
+        // Sort left to right
+        std::sort(visibleLabels.begin(), visibleLabels.end(), [](const auto& a, const auto& b) {
+            return a.minX < b.minX;
+        });
+
+        std::vector<BookmarkGroup> groups;
+        groups.push_back({ { visibleLabels[0] }, visibleLabels[0].minX, visibleLabels[0].maxX });
+
+        // Sort overlapping bookmarks into groups
+        if (visibleLabels.size() > 1) {
+            for (auto it = visibleLabels.begin() + 1; it != visibleLabels.end(); ++it) {
+                auto& label = *it;
+
+                if (label.minX <= groups.back().maxX + bookmarkGroupPadding * style::uiScale) {
+                    groups.back().vec_labels.push_back(label);
+                    groups.back().maxX = std::max(groups.back().maxX, label.maxX);
                 }
-
-                ImVec2 nameSize = ImGui::CalcTextSize(bm.bookmarkName.c_str());
-                ImVec2 rectMin = ImVec2(centerXpos - (nameSize.x / 2) - 5, args.min.y);
-                ImVec2 rectMax = ImVec2(centerXpos + (nameSize.x / 2) + 5, args.min.y + nameSize.y);
-                ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y);
-                ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y);
-
-                if (clampedRectMax.x - clampedRectMin.x > 0) {
-                    args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, IM_COL32(255, 255, 0, 255));
-                }
-                if (rectMin.x >= args.min.x && rectMax.x <= args.max.x) {
-                    args.window->DrawList->AddText(ImVec2(centerXpos - (nameSize.x / 2), args.min.y), IM_COL32(0, 0, 0, 255), bm.bookmarkName.c_str());
+                else {
+                    groups.push_back({ { label }, label.minX, label.maxX });
                 }
             }
         }
-        else if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_BOTTOM) {
-            for (auto const bm : _this->waterfallBookmarks) {
-                double centerXpos = args.min.x + std::round((bm.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
 
-                if (bm.bookmark.frequency >= args.lowFreq && bm.bookmark.frequency <= args.highFreq) {
-                    args.window->DrawList->AddLine(ImVec2(centerXpos, args.min.y), ImVec2(centerXpos, args.max.y), IM_COL32(255, 255, 0, 255));
+        _this->anyLabelHovered = false;
+
+        bool bookmarksAlignTop = _this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_TOP;
+
+        // Draw bookmarks
+        for (auto& group : groups) {
+            for (int i = 0; i < group.vec_labels.size(); i++) {
+                auto& label = group.vec_labels.at(i);
+
+                ImVec4 bookMarkColor = ImVec4(label.ptr_bm->bookmark.color[0], label.ptr_bm->bookmark.color[1], label.ptr_bm->bookmark.color[2], 1.0f);
+
+                float labelSizeX = label.maxX - label.minX;
+                float centerXpos = label.minX + (labelSizeX) / 2.0f;
+
+                float nameSizeY = ImGui::GetTextLineHeight();
+
+                ImVec2 rectMin;
+                ImVec2 rectMax;
+
+                if (bookmarksAlignTop) {
+                    float vfoZoneOffset = bookmarkGroupPadding * style::uiScale * 5.0f;
+                    rectMin = ImVec2(label.minX, gui::waterfall.vfoZoneMax.y + vfoZoneOffset + (nameSizeY + bookmarkGroupPadding * style::uiScale) * i);
+                    rectMax = ImVec2(label.maxX, gui::waterfall.vfoZoneMax.y + vfoZoneOffset + nameSizeY * (i + 1) + bookmarkGroupPadding * style::uiScale * i);
+                }
+                else {
+                    rectMin = ImVec2(label.minX, args.max.y - nameSizeY * (i + 1) - bookmarkGroupPadding * style::uiScale * i);
+                    rectMax = ImVec2(label.maxX, args.max.y - (nameSizeY + bookmarkGroupPadding * style::uiScale) * i);
                 }
 
-                ImVec2 nameSize = ImGui::CalcTextSize(bm.bookmarkName.c_str());
-                ImVec2 rectMin = ImVec2(centerXpos - (nameSize.x / 2) - 5, args.max.y - nameSize.y);
-                ImVec2 rectMax = ImVec2(centerXpos + (nameSize.x / 2) + 5, args.max.y);
+                if (rectMax.y > args.max.y) {break;}
+
                 ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y);
                 ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y);
 
-                if (clampedRectMax.x - clampedRectMin.x > 0) {
-                    args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, IM_COL32(255, 255, 0, 255));
+                ImVec2 lineMarkerMin = ImVec2(centerXpos, bookmarksAlignTop ? clampedRectMax.y : args.min.y);
+                ImVec2 lineMarkerMax = ImVec2(centerXpos, bookmarksAlignTop ? args.max.y : clampedRectMin.y);
+
+                // Draw label rect
+                args.window->DrawList->AddRectFilled(clampedRectMin, clampedRectMax, ImGui::ColorConvertFloat4ToU32(bookMarkColor), bookmarkLabelRounding);
+
+                // Draw outline on hover
+                if (ImGui::IsMouseHoveringRect(clampedRectMin, clampedRectMax)) {
+                    _this->anyLabelHovered = true;
+                    _this->hoveredBookmark = *label.ptr_bm;
+                    _this->hoveredBookmarkName = label.ptr_bm->bookmarkName.c_str();
+
+                    // Line marker outline
+                    args.window->DrawList->AddRectFilled(
+                        ImVec2(std::clamp<double>(centerXpos - bookmarkHoveredOutlineThickness, args.min.x, args.max.x), lineMarkerMin.y),
+                        ImVec2(std::clamp<double>(centerXpos + bookmarkHoveredOutlineThickness + 1, args.min.x, args.max.x), lineMarkerMax.y),
+                        bookmarkHoveredHighlightColor);
+
+                    // Label rect highlight
+                    args.window->DrawList->AddRectFilled(
+                        ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y),
+                        ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y),
+                        bookmarkHoveredHighlightColor,
+                        bookmarkLabelRounding);
                 }
+                else if (label.ptr_bm->bookmark.selected) {
+                    args.window->DrawList->AddRectFilled(
+                        ImVec2(std::clamp<double>(rectMin.x, args.min.x, args.max.x), rectMin.y),
+                        ImVec2(std::clamp<double>(rectMax.x, args.min.x, args.max.x), rectMax.y),
+                        (bookmarkHoveredHighlightColor ^ 0xff) | static_cast<int>((bookmarkHoveredHighlightColor & 0xff) * 0.7f),
+                        bookmarkLabelRounding);
+                }
+
+                // Draw center line
+                args.window->DrawList->AddLine(lineMarkerMin, lineMarkerMax, ImGui::ColorConvertFloat4ToU32(bookMarkColor));
+
+                // Draw text
                 if (rectMin.x >= args.min.x && rectMax.x <= args.max.x) {
-                    args.window->DrawList->AddText(ImVec2(centerXpos - (nameSize.x / 2), args.max.y - nameSize.y), IM_COL32(0, 0, 0, 255), bm.bookmarkName.c_str());
+                    args.window->DrawList->AddText(ImVec2(rectMin.x + bookmarkNameTextPadding * style::uiScale, rectMin.y), bookmarkTextColor, label.ptr_bm->bookmarkName.c_str());
                 }
             }
         }
@@ -686,52 +821,8 @@ private:
             return;
         }
 
-        // First check that the mouse clicked outside of any label. Also get the bookmark that's hovered
-        bool inALabel = false;
-        WaterfallBookmark hoveredBookmark;
-        std::string hoveredBookmarkName;
-
-        if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_TOP) {
-            int count = _this->waterfallBookmarks.size();
-            for (int i = count - 1; i >= 0; i--) {
-                auto& bm = _this->waterfallBookmarks[i];
-                double centerXpos = args.fftRectMin.x + std::round((bm.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
-                ImVec2 nameSize = ImGui::CalcTextSize(bm.bookmarkName.c_str());
-                ImVec2 rectMin = ImVec2(centerXpos - (nameSize.x / 2) - 5, args.fftRectMin.y);
-                ImVec2 rectMax = ImVec2(centerXpos + (nameSize.x / 2) + 5, args.fftRectMin.y + nameSize.y);
-                ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.fftRectMin.x, args.fftRectMax.x), rectMin.y);
-                ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.fftRectMin.x, args.fftRectMax.x), rectMax.y);
-
-                if (ImGui::IsMouseHoveringRect(clampedRectMin, clampedRectMax)) {
-                    inALabel = true;
-                    hoveredBookmark = bm;
-                    hoveredBookmarkName = bm.bookmarkName;
-                    break;
-                }
-            }
-        }
-        else if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_BOTTOM) {
-            int count = _this->waterfallBookmarks.size();
-            for (int i = count - 1; i >= 0; i--) {
-                auto& bm = _this->waterfallBookmarks[i];
-                double centerXpos = args.fftRectMin.x + std::round((bm.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
-                ImVec2 nameSize = ImGui::CalcTextSize(bm.bookmarkName.c_str());
-                ImVec2 rectMin = ImVec2(centerXpos - (nameSize.x / 2) - 5, args.fftRectMax.y - nameSize.y);
-                ImVec2 rectMax = ImVec2(centerXpos + (nameSize.x / 2) + 5, args.fftRectMax.y);
-                ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.fftRectMin.x, args.fftRectMax.x), rectMin.y);
-                ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.fftRectMin.x, args.fftRectMax.x), rectMax.y);
-
-                if (ImGui::IsMouseHoveringRect(clampedRectMin, clampedRectMax)) {
-                    inALabel = true;
-                    hoveredBookmark = bm;
-                    hoveredBookmarkName = bm.bookmarkName;
-                    break;
-                }
-            }
-        }
-
         // Check if mouse was already down
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !inALabel) {
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !_this->anyLabelHovered) {
             _this->mouseAlreadyDown = true;
         }
         if (!ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
@@ -740,29 +831,22 @@ private:
         }
 
         // If yes, cancel
-        if (_this->mouseAlreadyDown || !inALabel) { return; }
+        if (_this->mouseAlreadyDown || !_this->anyLabelHovered) { return; }
 
         gui::waterfall.inputHandled = true;
 
-        double centerXpos = args.fftRectMin.x + std::round((hoveredBookmark.bookmark.frequency - args.lowFreq) * args.freqToPixelRatio);
-        ImVec2 nameSize = ImGui::CalcTextSize(hoveredBookmarkName.c_str());
-        ImVec2 rectMin = ImVec2(centerXpos - (nameSize.x / 2) - 5, (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_BOTTOM) ? (args.fftRectMax.y - nameSize.y) : args.fftRectMin.y);
-        ImVec2 rectMax = ImVec2(centerXpos + (nameSize.x / 2) + 5, (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_BOTTOM) ? args.fftRectMax.y : args.fftRectMin.y + nameSize.y);
-        ImVec2 clampedRectMin = ImVec2(std::clamp<double>(rectMin.x, args.fftRectMin.x, args.fftRectMax.x), rectMin.y);
-        ImVec2 clampedRectMax = ImVec2(std::clamp<double>(rectMax.x, args.fftRectMin.x, args.fftRectMax.x), rectMax.y);
-
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
             _this->mouseClickedInLabel = true;
-            applyBookmark(hoveredBookmark.bookmark, gui::waterfall.selectedVFO);
+            applyBookmark(_this->hoveredBookmark.bookmark, gui::waterfall.selectedVFO);
         }
 
         ImGui::BeginTooltip();
-        ImGui::TextUnformatted(hoveredBookmarkName.c_str());
+        ImGui::TextUnformatted(_this->hoveredBookmarkName.c_str());
         ImGui::Separator();
-        ImGui::Text("List: %s", hoveredBookmark.listName.c_str());
-        ImGui::Text("Frequency: %s", utils::formatFreq(hoveredBookmark.bookmark.frequency).c_str());
-        ImGui::Text("Bandwidth: %s", utils::formatFreq(hoveredBookmark.bookmark.bandwidth).c_str());
-        ImGui::Text("Mode: %s", demodModeList[hoveredBookmark.bookmark.mode]);
+        ImGui::Text("List: %s", _this->hoveredBookmark.listName.c_str());
+        ImGui::Text("Frequency: %s", utils::formatFreq(_this->hoveredBookmark.bookmark.frequency).c_str());
+        ImGui::Text("Bandwidth: %s", utils::formatFreq(_this->hoveredBookmark.bookmark.bandwidth).c_str());
+        ImGui::Text("Mode: %s", demodModeList[_this->hoveredBookmark.bookmark.mode]);
         ImGui::EndTooltip();
     }
 
@@ -795,12 +879,7 @@ private:
                 flog::warn("Bookmark with the name '{0}' already exists in list, skipping", _name);
                 continue;
             }
-            FrequencyBookmark fbm;
-            fbm.frequency = bm["frequency"];
-            fbm.bandwidth = bm["bandwidth"];
-            fbm.mode = bm["mode"];
-            fbm.selected = false;
-            bookmarks[_name] = fbm;
+            bookmarks[_name] = parseBookmark(bm);
         }
         saveByName(selectedListName);
 
