@@ -154,7 +154,7 @@ namespace rds {
             }
             else {
                 // Assume the type is the one following the previous block
-                type = nextType[lastType + 1];
+                type = nextType[lastType];
             }
 
             // Save block while correcting errors (NOT YET) <- idk why the "not yet is here", TODO: find why
@@ -297,6 +297,11 @@ namespace rds {
         if (blockAvail[BLOCK_TYPE_D]) {
             programServiceName[psOffset] = (blocks[BLOCK_TYPE_D] >> 18) & 0xFF;
             programServiceName[psOffset + 1] = (blocks[BLOCK_TYPE_D] >> 10) & 0xFF;
+
+            // Update the full version only when reaching the end
+            if (offset == 3) {
+                programServiceNameFullUpdate = programServiceName;
+            }
         }
 
         // Update timeout
@@ -313,6 +318,7 @@ namespace rds {
 
         // Clear text field if the A/B flag changed
         if (nAB != rtAB) {
+            radioTextFullUpdate = radioText;
             radioText = "                                                                ";
         }
         rtAB = nAB;
@@ -328,12 +334,22 @@ namespace rds {
                 radioText[rtOffset + 2] = (blocks[BLOCK_TYPE_D] >> 18) & 0xFF;
                 radioText[rtOffset + 3] = (blocks[BLOCK_TYPE_D] >> 10) & 0xFF;
             }
+
+            // If a carriage return was sent, update the full text
+            if (offset == 0xF || radioText[rtOffset] == 0x0D || radioText[rtOffset + 1] == 0x0D || radioText[rtOffset + 2] == 0x0D || radioText[rtOffset + 3] == 0x0D) {
+                radioTextFullUpdate = radioText;
+            }
         }
         else {
             uint8_t rtOffset = offset * 2;
             if (blockAvail[BLOCK_TYPE_D]) {
                 radioText[rtOffset] = (blocks[BLOCK_TYPE_D] >> 18) & 0xFF;
                 radioText[rtOffset + 1] = (blocks[BLOCK_TYPE_D] >> 10) & 0xFF;
+            }
+
+            // If a carriage return was sent, update the full text
+            if (offset == 0xF || radioText[rtOffset] == 0x0D || radioText[rtOffset + 1] == 0x0D) {
+                radioTextFullUpdate = radioText;
             }
         }
 
