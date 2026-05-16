@@ -1438,11 +1438,11 @@ namespace ImGui {
                 hovered ? VFO_HoverCol : VFO_TextBgCol,
                 style::uiScale * 2.0f);
 
-            // Indicator
+            // Selection indicator
             ImVec2 selectIndStart = ImVec2(nameTagStart.x, nameTagEnd.y + style::uiScale * 2.0f);
             ImVec2 selectIndEnd = ImVec2(nameTagEnd.x, nameTagEnd.y + style::uiScale * (selected ? 6.0f : 4.0f));
             if (selectIndEnd.y > gui::waterfall.vfoZoneMax.y) { gui::waterfall.vfoZoneMax.y = selectIndEnd.y; }
-            window->DrawList->AddRectFilled(selectIndStart, selectIndEnd, selected ? VFO_DefaultSelectedLineCol : VFO_DefaultUnselectedLineCol);
+            window->DrawList->AddRectFilled(selectIndStart, selectIndEnd, selected ? VFO_DefaultSelectedLineCol : VFO_DefaultUnselectedLineCol, style::uiScale * 2.0f);
 
             // Name
             window->DrawList->AddText(nameTextStart, hovered ? VFO_TextColDark : VFO_TextColLight, name.c_str());
