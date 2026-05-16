@@ -27,8 +27,10 @@
 #include <gui/colormaps.h>
 #include <gui/widgets/snr_meter.h>
 #include <gui/tuner.h>
+#include "Tracy.hpp"
 
 void MainWindow::init() {
+    ZoneScoped;
     LoadingScreen::show("Initializing UI");
     gui::waterfall.init();
     gui::waterfall.setRawFFTSize(fftSize);
@@ -228,14 +230,17 @@ void MainWindow::init() {
 }
 
 float* MainWindow::acquireFFTBuffer(void* ctx) {
+    ZoneScoped;
     return gui::waterfall.getFFTBuffer();
 }
 
 void MainWindow::releaseFFTBuffer(void* ctx) {
+    ZoneScoped;
     gui::waterfall.pushFFT();
 }
 
 void MainWindow::vfoAddedHandler(VFOManager::VFO* vfo, void* ctx) {
+    ZoneScoped;
     MainWindow* _this = (MainWindow*)ctx;
     std::string name = vfo->getName();
     core::configManager.acquire();
@@ -258,6 +263,7 @@ void MainWindow::vfoAddedHandler(VFOManager::VFO* vfo, void* ctx) {
 }
 
 void MainWindow::draw() {
+    ZoneScoped;
     ImGui::Begin("Main", NULL, WINDOW_FLAGS);
     ImVec4 textCol = ImGui::GetStyleColorVec4(ImGuiCol_Text);
 
@@ -674,6 +680,7 @@ void MainWindow::draw() {
 }
 
 void MainWindow::setPlayState(bool _playing) {
+    ZoneScoped;
     if (_playing == playing) { return; }
     if (_playing) {
         sigpath::iqFrontEnd.flushInputBuffer();
@@ -691,17 +698,21 @@ void MainWindow::setPlayState(bool _playing) {
 }
 
 void MainWindow::setViewBandwidthSlider(float bandwidth) {
+    ZoneScoped;
     bw = bandwidth;
 }
 
 bool MainWindow::sdrIsRunning() {
+    ZoneScoped;
     return playing;
 }
 
 bool MainWindow::isPlaying() {
+    ZoneScoped;
     return playing;
 }
 
 void MainWindow::setFirstMenuRender() {
+    ZoneScoped;
     firstMenuRender = true;
 }

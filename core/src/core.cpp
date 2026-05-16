@@ -14,8 +14,11 @@
 #include <filesystem>
 #include <gui/menus/theme.h>
 #include <backend.h>
+#include "Tracy.hpp"
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
+
+
 #include <stb_image_resize.h>
 #include <gui/gui.h>
 #include <signal_path/signal_path.h>

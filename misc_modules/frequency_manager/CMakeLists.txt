@@ -6,3 +6,7 @@ file(GLOB SRC "src/*.cpp")
 include(${SDRPP_MODULE_CMAKE})
 
 target_include_directories(frequency_manager PRIVATE "src/" "../../decoder_modules/radio/src")
+
+if (OPT_ENABLE_TRACY)
+    target_compile_definitions(frequency_manager PUBLIC TRACY_ENABLE)
+endif()

@@ -7,6 +7,7 @@
 #include <utils/flog.h>
 #include <gui/gui.h>
 #include <gui/style.h>
+#include "Tracy.hpp"
 
 float DEFAULT_COLOR_MAP[][3] = {
     { 0x00, 0x00, 0x20 },
@@ -38,6 +39,7 @@ double freq_ranges[] = {
 };
 
 inline double findBestRange(double bandwidth, int maxSteps) {
+    ZoneScoped;
     for (int i = 0; i < 32; i++) {
         if (bandwidth / freq_ranges[i] < (double)maxSteps) {
             return freq_ranges[i];
@@ -47,6 +49,7 @@ inline double findBestRange(double bandwidth, int maxSteps) {
 }
 
 inline void printAndScale(double freq, char* buf) {
+    ZoneScoped;
     double freqAbs = fabs(freq);
     if (freqAbs < 1000) {
         sprintf(buf, "%.6g", freq);
@@ -63,6 +66,7 @@ inline void printAndScale(double freq, char* buf) {
 }
 
 inline void doZoom(int offset, int width, int inSize, int outSize, float* in, float* out) {
+ZoneScoped;
     // NOTE: REMOVE THAT SHIT, IT'S JUST A HACKY FIX
     if (offset < 0) {
         offset = 0;
@@ -114,10 +118,12 @@ namespace ImGui {
     }
 
     void WaterFall::init() {
+        ZoneScoped;
         glGenTextures(1, &textureId);
     }
 
     void WaterFall::drawFFT() {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(latestFFTMtx);
         // Calculate scaling factor
         float startLine = floorf(fftMax / vRange) * vRange;
@@ -206,6 +212,7 @@ namespace ImGui {
     }
 
     void WaterFall::drawWaterfall() {
+        ZoneScoped;
         if (waterfallUpdate) {
             waterfallUpdate = false;
             updateWaterfallTexture();
@@ -217,6 +224,7 @@ namespace ImGui {
     }
 
     void WaterFall::drawVFOs() {
+        ZoneScoped;
         vfoZoneMin = ImVec2(fftAreaMin.x, fftAreaMin.y);
         vfoZoneMax = vfoZoneMin;
         for (auto const& [name, vfo] : vfos) {
@@ -225,6 +233,7 @@ namespace ImGui {
     }
 
     void WaterFall::selectFirstVFO() {
+        ZoneScoped;
         bool available = false;
         for (auto const& [name, vfo] : vfos) {
             available = true;
@@ -239,6 +248,7 @@ namespace ImGui {
     }
 
     void WaterFall::processInputs() {
+        ZoneScoped;
         // Pre calculate useful values
         WaterfallVFO* selVfo = NULL;
         if (selectedVFO != "") {
@@ -548,6 +558,7 @@ namespace ImGui {
     }
 
     bool WaterFall::calculateVFOSignalInfo(float* fftLine, WaterfallVFO* _vfo, float& strength, float& snr) {
+        ZoneScoped;
         if (fftLine == NULL || fftLines <= 0) { return false; }
 
         // Calculate FFT index data
@@ -590,6 +601,7 @@ namespace ImGui {
     }
 
     void WaterFall::updateWaterfallFb() {
+        ZoneScoped;
         if (!waterfallVisible || rawFFTs == NULL) {
             return;
         }
@@ -623,6 +635,7 @@ namespace ImGui {
     }
 
     void WaterFall::drawBandPlan() {
+        ZoneScoped;
         int count = bandplan->bands.size();
         double horizScale = (double)dataWidth / viewBandwidth;
         double start, end, center, aPos, bPos, cPos, width;
@@ -694,6 +707,7 @@ namespace ImGui {
     }
 
     void WaterFall::updateWaterfallTexture() {
+        ZoneScoped;
         std::lock_guard<std::mutex> lck(texMtx);
         glBindTexture(GL_TEXTURE_2D, textureId);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
@@ -703,10 +717,12 @@ namespace ImGui {
     }
 
     void WaterFall::onPositionChange() {
+        ZoneScoped;
         // Nothing to see here...
     }
 
     void WaterFall::onResize() {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(latestFFTMtx);
         std::lock_guard<std::mutex> lck2(smoothingBufMtx);
         // return if widget is too small
@@ -799,6 +815,7 @@ namespace ImGui {
     }
 
     void WaterFall::draw() {
+        ZoneScoped;
         buf_mtx.lock();
         window = GetCurrentWindow();
 
@@ -866,6 +883,7 @@ namespace ImGui {
     }
 
     float* WaterFall::getFFTBuffer() {
+        ZoneScoped;
         if (rawFFTs == NULL) { return NULL; }
         buf_mtx.lock();
         if (waterfallVisible) {
@@ -879,6 +897,7 @@ namespace ImGui {
     }
 
     void WaterFall::pushFFT() {
+        ZoneScoped;
         if (rawFFTs == NULL) { return; }
         std::lock_guard<std::recursive_mutex> lck(latestFFTMtx);
         double offsetRatio = viewOffset / (wholeBandwidth / 2.0);
@@ -934,6 +953,7 @@ namespace ImGui {
     }
 
     void WaterFall::updatePallette(float colors[][3], int colorCount) {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(buf_mtx);
         for (int i = 0; i < WATERFALL_RESOLUTION; i++) {
             int lowerId = floorf(((float)i / (float)WATERFALL_RESOLUTION) * colorCount);
@@ -950,6 +970,7 @@ namespace ImGui {
     }
 
     void WaterFall::updatePalletteFromArray(float* colors, int colorCount) {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(buf_mtx);
         for (int i = 0; i < WATERFALL_RESOLUTION; i++) {
             int lowerId = floorf(((float)i / (float)WATERFALL_RESOLUTION) * colorCount);
@@ -966,6 +987,7 @@ namespace ImGui {
     }
 
     void WaterFall::autoRange() {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(latestFFTMtx);
         float min = INFINITY;
         float max = -INFINITY;
@@ -982,6 +1004,7 @@ namespace ImGui {
     }
 
     void WaterFall::setCenterFrequency(double freq) {
+        ZoneScoped;
         centerFreq = freq;
         lowerFreq = (centerFreq + viewOffset) - (viewBandwidth / 2.0);
         upperFreq = (centerFreq + viewOffset) + (viewBandwidth / 2.0);
@@ -989,10 +1012,12 @@ namespace ImGui {
     }
 
     double WaterFall::getCenterFrequency() {
+        ZoneScoped;
         return centerFreq;
     }
 
     void WaterFall::setBandwidth(double bandWidth) {
+        ZoneScoped;
         double currentRatio = viewBandwidth / wholeBandwidth;
         wholeBandwidth = bandWidth;
         setViewBandwidth(bandWidth * currentRatio);
@@ -1008,10 +1033,12 @@ namespace ImGui {
     }
 
     double WaterFall::getBandwidth() {
+        ZoneScoped;
         return wholeBandwidth;
     }
 
     void WaterFall::setViewBandwidth(double bandWidth) {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(buf_mtx);
         if (bandWidth == viewBandwidth) {
             return;
@@ -1033,10 +1060,12 @@ namespace ImGui {
     }
 
     double WaterFall::getViewBandwidth() {
+        ZoneScoped;
         return viewBandwidth;
     }
 
     void WaterFall::setViewOffset(double offset) {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(buf_mtx);
         if (offset == viewOffset) {
             return;
@@ -1055,33 +1084,40 @@ namespace ImGui {
     }
 
     double WaterFall::getViewOffset() {
+        ZoneScoped;
         return viewOffset;
     }
 
     void WaterFall::setFFTMin(float min) {
+        ZoneScoped;
         fftMin = min;
         vRange = findBestRange(fftMax - fftMin, maxVSteps);
     }
 
     float WaterFall::getFFTMin() {
+        ZoneScoped;
         return fftMin;
     }
 
     void WaterFall::setFFTMax(float max) {
+        ZoneScoped;
         fftMax = max;
         vRange = findBestRange(fftMax - fftMin, maxVSteps);
     }
 
     float WaterFall::getFFTMax() {
+        ZoneScoped;
         return fftMax;
     }
 
     void WaterFall::setFullWaterfallUpdate(bool fullUpdate) {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(buf_mtx);
         _fullUpdate = fullUpdate;
     }
 
     void WaterFall::setWaterfallMin(float min) {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(buf_mtx);
         if (min == waterfallMin) {
             return;
@@ -1091,10 +1127,12 @@ namespace ImGui {
     }
 
     float WaterFall::getWaterfallMin() {
+        ZoneScoped;
         return waterfallMin;
     }
 
     void WaterFall::setWaterfallMax(float max) {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(buf_mtx);
         if (max == waterfallMax) {
             return;
@@ -1104,10 +1142,12 @@ namespace ImGui {
     }
 
     float WaterFall::getWaterfallMax() {
+        ZoneScoped;
         return waterfallMax;
     }
 
     void WaterFall::updateAllVFOs(bool checkRedrawRequired) {
+        ZoneScoped;
         for (auto const& [name, vfo] : vfos) {
             if (checkRedrawRequired && !vfo->redrawRequired) { continue; }
             vfo->name = name;
@@ -1125,6 +1165,7 @@ namespace ImGui {
     }
 
     void WaterFall::setRawFFTSize(int size) {
+        ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(buf_mtx);
         rawFFTSize = size;
         int wfSize = std::max<int>(1, waterfallHeight);
@@ -1140,10 +1181,12 @@ namespace ImGui {
     }
 
     void WaterFall::setBandPlanPos(int pos) {
+        ZoneScoped;
         bandPlanPos = pos;
     }
 
     void WaterFall::setFFTHold(bool hold) {
+        ZoneScoped;
         fftHold = hold;
         if (fftHold && latestFFTHold) {
             for (int i = 0; i < dataWidth; i++) {
@@ -1153,10 +1196,12 @@ namespace ImGui {
     }
 
     void WaterFall::setFFTHoldSpeed(float speed) {
+        ZoneScoped;
         fftHoldSpeed = speed;
     }
 
     void WaterFall::setFFTSmoothing(bool enabled) {
+        ZoneScoped;
         std::lock_guard<std::mutex> lck(smoothingBufMtx);
         fftSmoothing = enabled;
 
@@ -1181,21 +1226,25 @@ namespace ImGui {
     }
 
     void WaterFall::setFFTSmoothingSpeed(float speed) {
+        ZoneScoped;
         std::lock_guard<std::mutex> lck(smoothingBufMtx);
         fftSmoothingAlpha = speed;
         fftSmoothingBeta = 1.0f - speed;
     }
 
     void WaterFall::setSNRSmoothing(bool enabled) {
+        ZoneScoped;
         snrSmoothing = enabled;
     }
 
     void WaterFall::setSNRSmoothingSpeed(float speed) {
+        ZoneScoped;
         snrSmoothingAlpha = speed;
         snrSmoothingBeta = 1.0f - speed;
     }
 
     float* WaterFall::acquireLatestFFT(int& width) {
+        ZoneScoped;
         latestFFTMtx.lock();
         if (!latestFFT) {
             latestFFTMtx.unlock();
@@ -1206,10 +1255,12 @@ namespace ImGui {
     }
 
     void WaterFall::releaseLatestFFT() {
+        ZoneScoped;
         latestFFTMtx.unlock();
     }
 
     void drawDottedLineVert(ImGuiWindow* window, ImVec2 start, ImVec2 end, ImU32 color, float lineSegLength, float thickness) {
+        ZoneScoped;
         int lineSegCount = ceilf((end.y - start.y) / VFO_DefaultLineSegLength);
         for (int i = 0; i < lineSegCount; i++) {
             float yStart = start.y + i * lineSegLength;
@@ -1220,6 +1271,7 @@ namespace ImGui {
     }
 
     void WaterfallVFO::setOffset(double offset) {
+        ZoneScoped;
         generalOffset = offset;
         if (reference == REF_CENTER) {
             centerOffset = offset;
@@ -1243,6 +1295,7 @@ namespace ImGui {
     }
 
     void WaterfallVFO::setCenterOffset(double offset) {
+        ZoneScoped;
         if (reference == REF_CENTER) {
             generalOffset = offset;
         }
@@ -1262,6 +1315,7 @@ namespace ImGui {
     }
 
     void WaterfallVFO::setBandwidth(double bw) {
+        ZoneScoped;
         if (bandwidth == bw || bw < 0) {
             return;
         }
@@ -1285,6 +1339,7 @@ namespace ImGui {
     }
 
     void WaterfallVFO::setReference(int ref) {
+        ZoneScoped;
         if (reference == ref || ref < 0 || ref >= _REF_COUNT) {
             return;
         }
@@ -1293,21 +1348,25 @@ namespace ImGui {
     }
 
     void WaterfallVFO::setNotchOffset(double offset) {
+        ZoneScoped;
         notchOffset = offset;
         redrawRequired = true;
     }
 
     void WaterfallVFO::setNotchVisible(bool visible) {
+        ZoneScoped;
         notchVisible = visible;
         redrawRequired = true;
     }
     bool WaterfallVFO::isHovered() {
+        ZoneScoped;
         return ImGui::IsMouseHoveringRect(rectMin, rectMax) ||
                ImGui::IsMouseHoveringRect(wfRectMin, wfRectMax) ||
                ImGui::IsMouseHoveringRect(nameTagStart, nameTagEnd);
     }
 
     void WaterfallVFO::updateDrawingVars(double viewBandwidth, float dataWidth, double viewOffset, ImVec2 widgetPos, int fftHeight) {
+        ZoneScoped;
         int center = roundf((((centerOffset - viewOffset) / (viewBandwidth / 2.0)) + 1.0) * ((double)dataWidth / 2.0));
         int left = roundf((((lowerOffset - viewOffset) / (viewBandwidth / 2.0)) + 1.0) * ((double)dataWidth / 2.0));
         int right = roundf((((upperOffset - viewOffset) / (viewBandwidth / 2.0)) + 1.0) * ((double)dataWidth / 2.0));
@@ -1378,6 +1437,7 @@ namespace ImGui {
     }
 
     void WaterfallVFO::draw(ImGuiWindow* window, bool selected) {
+        ZoneScoped;
         ImVec2 mousePos = ImGui::GetMousePos();
 
         bool hovered = false;
@@ -1454,6 +1514,7 @@ namespace ImGui {
     }
 
     void WaterFall::showWaterfall() {
+        ZoneScoped;
         buf_mtx.lock();
         if (rawFFTs == NULL) {
             flog::error("Null rawFFT");
@@ -1466,6 +1527,7 @@ namespace ImGui {
     }
 
     void WaterFall::hideWaterfall() {
+        ZoneScoped;
         buf_mtx.lock();
         waterfallVisible = false;
         onResize();
@@ -1473,6 +1535,7 @@ namespace ImGui {
     }
 
     void WaterFall::setFFTHeight(int height) {
+        ZoneScoped;
         FFTAreaHeight = height;
         newFFTAreaHeight = height;
         buf_mtx.lock();
@@ -1481,18 +1544,22 @@ namespace ImGui {
     }
 
     int WaterFall::getFFTHeight() {
+        ZoneScoped;
         return FFTAreaHeight;
     }
 
     void WaterFall::showBandplan() {
+        ZoneScoped;
         bandplanVisible = true;
     }
 
     void WaterFall::hideBandplan() {
+        ZoneScoped;
         bandplanVisible = false;
     }
 
     void WaterfallVFO::setSnapInterval(double interval) {
+        ZoneScoped;
         snapInterval = interval;
     }
 };

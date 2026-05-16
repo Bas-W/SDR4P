@@ -2,6 +2,7 @@
 #include "style.h"
 #include <gui/widgets/stepped_slider.h>
 #include <gui/gui.h>
+#include "Tracy.hpp"
 
 namespace SmGui {
     std::map<FormatString, const char*> fmtStr = {
@@ -34,6 +35,7 @@ namespace SmGui {
     }
 
     void init(bool server) {
+        ZoneScoped;
         serverMode = server;
     }
     

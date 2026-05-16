@@ -1,6 +1,7 @@
 #include <gui/icons.h>
 #include <stdint.h>
 #include <config.h>
+#include "Tracy.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <imgui/stb_image.h>
@@ -32,6 +33,7 @@ namespace icons {
     }
 
     bool load(std::string resDir) {
+        ZoneScoped;
         if (!std::filesystem::is_directory(resDir)) {
             flog::error("Invalid resource directory: {0}", resDir);
             return false;
