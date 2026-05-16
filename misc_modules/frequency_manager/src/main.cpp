@@ -146,6 +146,7 @@ private:
     }
 
     static FrequencyBookmark parseBookmark(const json& bm) {
+        ZoneScoped;
         FrequencyBookmark fbm;
 
         try {
