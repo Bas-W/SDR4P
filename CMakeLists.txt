@@ -72,6 +72,7 @@ option(OPT_BUILD_SCHEDULER "Build the scheduler" OFF)
 option(USE_INTERNAL_LIBCORRECT "Use an internal version of libcorrect" ON)
 option(USE_BUNDLE_DEFAULTS "Set the default resource and module directories to the right ones for a MacOS .app" OFF)
 option(COPY_MSVC_REDISTRIBUTABLES "Copy over the Visual C++ Redistributable" OFF)
+option(OPT_ENABLE_TRACY "Enable Tracy profiler" OFF)
 
 # Module cmake path
 set(SDRPP_MODULE_CMAKE "${CMAKE_SOURCE_DIR}/sdrpp_module.cmake")
@@ -119,6 +120,12 @@ if (ANDROID)
     set(CMAKE_CXX_STANDARD 14)
     set(CMAKE_CXX14_EXTENSION_COMPILE_OPTION "-std=c++17")
 endif (ANDROID)
+
+
+# Tracy profiler
+if (OPT_ENABLE_TRACY)
+    add_subdirectory(thirdparty/tracy)
+endif()
 
 # Core of SDR++
 add_subdirectory("core")

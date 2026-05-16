@@ -30,6 +30,13 @@ endif (OPT_BACKEND_ANDROID)
 # Add code to dyn lib
 add_library(sdrpp_core SHARED ${SRC} ${BACKEND_SRC})
 
+# Add tracy profiler
+target_sources(sdrpp_core PRIVATE "${CMAKE_SOURCE_DIR}/thirdparty/tracy/public/TracyClient.cpp")
+target_include_directories(sdrpp_core PUBLIC "${CMAKE_SOURCE_DIR}/thirdparty/tracy/public" "${CMAKE_SOURCE_DIR}/thirdparty/tracy/public/tracy")
+if (OPT_ENABLE_TRACY)
+    target_compile_definitions(sdrpp_core PUBLIC TRACY_ENABLE)
+endif()
+
 # Set compiler options
 target_compile_options(sdrpp_core PRIVATE ${SDRPP_COMPILER_FLAGS})
 

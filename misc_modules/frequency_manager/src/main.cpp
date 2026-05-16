@@ -13,6 +13,7 @@
 #include <utils/freq_formatting.h>
 #include <gui/dialogs/dialog_box.h>
 #include <fstream>
+#include "Tracy.hpp"
 
 SDRPP_MOD_INFO{
     /* Name:            */ "frequency_manager",
@@ -92,19 +93,23 @@ public:
     void postInit() {}
 
     void enable() {
+        ZoneScoped;
         enabled = true;
     }
 
     void disable() {
+        ZoneScoped;
         enabled = false;
     }
 
     bool isEnabled() {
+        ZoneScoped;
         return enabled;
     }
 
 private:
     static void applyBookmark(FrequencyBookmark bm, std::string vfoName) {
+        ZoneScoped;
         if (vfoName == "") {
             // TODO: Replace with proper tune call
             gui::waterfall.setCenterFrequency(bm.frequency);
@@ -124,6 +129,7 @@ private:
     }
 
     bool bookmarkEditDialog() {
+        ZoneScoped;
         bool open = true;
         gui::mainWindow.lockWaterfallControls = true;
 
@@ -193,6 +199,7 @@ private:
     }
 
     bool newListDialog() {
+        ZoneScoped;
         bool open = true;
         gui::mainWindow.lockWaterfallControls = true;
 
@@ -242,6 +249,7 @@ private:
     }
 
     bool selectListsDialog() {
+        ZoneScoped;
         gui::mainWindow.lockWaterfallControls = true;
 
         float menuWidth = ImGui::GetContentRegionAvail().x;
@@ -272,11 +280,13 @@ private:
     }
 
     void refreshLists() {
+        ZoneScoped;
         listNames.clear();
         listNamesTxt = "";
 
         config.acquire();
         for (auto [_name, list] : config.conf["lists"].items()) {
+            ZoneScopedN("refreshLists_loadItem");
             listNames.push_back(_name);
             listNamesTxt += _name;
             listNamesTxt += '\0';
@@ -285,9 +295,11 @@ private:
     }
 
     void refreshWaterfallBookmarks(bool lockConfig = true) {
+        ZoneScoped;
         if (lockConfig) { config.acquire(); }
         waterfallBookmarks.clear();
         for (auto [listName, list] : config.conf["lists"].items()) {
+            ZoneScopedN("refreshWaterfallBookmarks_loadItem");
             if (!((bool)list["showOnWaterfall"])) { continue; }
             WaterfallBookmark wbm;
             wbm.listName = listName;
@@ -304,6 +316,7 @@ private:
     }
 
     void loadFirst() {
+        ZoneScoped;
         if (listNames.size() > 0) {
             loadByName(listNames[0]);
             return;
@@ -313,6 +326,7 @@ private:
     }
 
     void loadByName(std::string listName) {
+        ZoneScoped;
         bookmarks.clear();
         if (std::find(listNames.begin(), listNames.end(), listName) == listNames.end()) {
             selectedListName = "";
@@ -324,6 +338,7 @@ private:
         selectedListName = listName;
         config.acquire();
         for (auto [bmName, bm] : config.conf["lists"][listName]["bookmarks"].items()) {
+            ZoneScopedN("loadByName_loadItem");
             FrequencyBookmark fbm;
             fbm.frequency = bm["frequency"];
             fbm.bandwidth = bm["bandwidth"];
@@ -335,9 +350,11 @@ private:
     }
 
     void saveByName(std::string listName) {
+        ZoneScoped;
         config.acquire();
         config.conf["lists"][listName]["bookmarks"] = json::object();
         for (auto [bmName, bm] : bookmarks) {
+            ZoneScopedN("saveByName_saveItem");
             config.conf["lists"][listName]["bookmarks"][bmName]["frequency"] = bm.frequency;
             config.conf["lists"][listName]["bookmarks"][bmName]["bandwidth"] = bm.bandwidth;
             config.conf["lists"][listName]["bookmarks"][bmName]["mode"] = bm.mode;
@@ -347,6 +364,7 @@ private:
     }
 
     static void menuHandler(void* ctx) {
+        ZoneScoped;
         FrequencyManagerModule* _this = (FrequencyManagerModule*)ctx;
         float menuWidth = ImGui::GetContentRegionAvail().x;
 
@@ -603,6 +621,7 @@ private:
     }
 
     static void fftRedraw(ImGui::WaterFall::FFTRedrawArgs args, void* ctx) {
+        ZoneScoped;
         FrequencyManagerModule* _this = (FrequencyManagerModule*)ctx;
         if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_OFF) { return; }
 
@@ -655,6 +674,7 @@ private:
     bool mouseAlreadyDown = false;
     bool mouseClickedInLabel = false;
     static void fftInput(ImGui::WaterFall::InputHandlerArgs args, void* ctx) {
+        ZoneScoped;
         FrequencyManagerModule* _this = (FrequencyManagerModule*)ctx;
         if (_this->bookmarkDisplayMode == BOOKMARK_DISP_MODE_OFF) { return; }
 
@@ -753,6 +773,7 @@ private:
     pfd::save_file* exportDialog;
 
     void importBookmarks(std::string path) {
+        ZoneScoped;
         std::ifstream fs(path);
         json importBookmarks;
         fs >> importBookmarks;
@@ -769,6 +790,7 @@ private:
 
         // Load every bookmark
         for (auto const [_name, bm] : importBookmarks["bookmarks"].items()) {
+            ZoneScopedN("importBookmarks_loadItem");
             if (bookmarks.find(_name) != bookmarks.end()) {
                 flog::warn("Bookmark with the name '{0}' already exists in list, skipping", _name);
                 continue;
@@ -786,6 +808,7 @@ private:
     }
 
     void exportBookmarks(std::string path) {
+        ZoneScoped;
         std::ofstream fs(path);
         fs << exportedBookmarks;
         fs.close();
@@ -825,6 +848,7 @@ private:
 };
 
 MOD_EXPORT void _INIT_() {
+    ZoneScoped;
     json def = json({});
     def["selectedList"] = "General";
     def["bookmarkDisplayMode"] = BOOKMARK_DISP_MODE_TOP;
@@ -852,14 +876,17 @@ MOD_EXPORT void _INIT_() {
 }
 
 MOD_EXPORT ModuleManager::Instance* _CREATE_INSTANCE_(std::string name) {
+    ZoneScoped;
     return new FrequencyManagerModule(name);
 }
 
 MOD_EXPORT void _DELETE_INSTANCE_(void* instance) {
+    ZoneScoped;
     delete (FrequencyManagerModule*)instance;
 }
 
 MOD_EXPORT void _END_() {
+    ZoneScoped;
     config.disableAutoSave();
     config.save();
 }

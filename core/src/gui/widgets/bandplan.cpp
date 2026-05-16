@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <sstream>
 #include <iomanip>
+#include "Tracy.hpp"
 
 namespace bandplan {
     std::map<std::string, BandPlan_t> bandplans;
@@ -12,6 +13,7 @@ namespace bandplan {
     std::map<std::string, BandPlanColor_t> colorTable;
 
     void generateTxt() {
+        ZoneScoped;
         bandplanNameTxt = "";
         for (int i = 0; i < bandplanNames.size(); i++) {
             bandplanNameTxt += bandplanNames[i];
@@ -20,6 +22,7 @@ namespace bandplan {
     }
 
     void to_json(json& j, const Band_t& b) {
+        ZoneScoped;
         j = json{
             { "name", b.name },
             { "type", b.type },
@@ -29,6 +32,7 @@ namespace bandplan {
     }
 
     void from_json(const json& j, Band_t& b) {
+        ZoneScoped;
         j.at("name").get_to(b.name);
         j.at("type").get_to(b.type);
         j.at("start").get_to(b.start);
@@ -36,6 +40,7 @@ namespace bandplan {
     }
 
     void to_json(json& j, const BandPlan_t& b) {
+        ZoneScoped;
         j = json{
             { "name", b.name },
             { "country_name", b.countryName },
@@ -47,6 +52,7 @@ namespace bandplan {
     }
 
     void from_json(const json& j, BandPlan_t& b) {
+        ZoneScoped;
         j.at("name").get_to(b.name);
         j.at("country_name").get_to(b.countryName);
         j.at("country_code").get_to(b.countryCode);
@@ -56,10 +62,12 @@ namespace bandplan {
     }
 
     void to_json(json& j, const BandPlanColor_t& ct) {
+        ZoneScoped;
         flog::error("ImGui color to JSON not implemented!!!");
     }
 
     void from_json(const json& j, BandPlanColor_t& ct) {
+        ZoneScoped;
         std::string col = j.get<std::string>();
         if (col[0] != '#' || !std::all_of(col.begin() + 1, col.end(), ::isxdigit)) {
             return;
@@ -74,6 +82,7 @@ namespace bandplan {
     }
 
     void loadBandPlan(std::string path) {
+        ZoneScoped;
         std::ifstream file(path.c_str());
         json data;
         file >> data;
@@ -90,6 +99,7 @@ namespace bandplan {
     }
 
     void loadFromDir(std::string path) {
+        ZoneScoped;
         if (!std::filesystem::exists(path)) {
             flog::error("Band Plan directory does not exist");
             return;
@@ -109,6 +119,7 @@ namespace bandplan {
     }
 
     void loadColorTable(json table) {
+        ZoneScoped;
         colorTable = table.get<std::map<std::string, BandPlanColor_t>>();
     }
 };

@@ -4,6 +4,7 @@
 #include <config.h>
 #include <utils/flog.h>
 #include <filesystem>
+#include "Tracy.hpp"
 
 namespace style {
     ImFont* baseFont;
@@ -20,6 +21,7 @@ namespace style {
 #endif
 
     bool loadFonts(std::string resDir) {
+        ZoneScoped;
         ImFontAtlas* fonts = ImGui::GetIO().Fonts;
         if (!std::filesystem::is_directory(resDir)) {
             flog::error("Invalid resource directory: {0}", resDir);

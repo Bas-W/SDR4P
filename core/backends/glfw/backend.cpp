@@ -11,6 +11,7 @@
 #include <stb_image.h>
 #include <stb_image_resize.h>
 #include <gui/gui.h>
+#include <Tracy.hpp>
 
 namespace backend {
     const char* OPENGL_VERSIONS_GLSL[] = {
@@ -50,10 +51,12 @@ namespace backend {
     GLFWmonitor* monitor;
 
     static void glfw_error_callback(int error, const char* description) {
+        ZoneScoped;
         flog::error("Glfw Error {0}: {1}", error, description);
     }
 
     static void maximized_callback(GLFWwindow* window, int n) {
+        ZoneScoped;
         if (n == GLFW_TRUE) {
             maximized = true;
         }
@@ -63,6 +66,7 @@ namespace backend {
     }
 
     int init(std::string resDir) {
+        ZoneScoped;
         // Load config
         core::configManager.acquire();
         winWidth = core::configManager.conf["windowSize"]["w"];
@@ -202,6 +206,7 @@ namespace backend {
     }
 
     void beginFrame() {
+        ZoneScoped;
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -209,6 +214,7 @@ namespace backend {
     }
 
     void render(bool vsync) {
+        ZoneScopedN("Render");
         // Rendering
         ImGui::Render();
         int display_w, display_h;
@@ -223,10 +229,12 @@ namespace backend {
     }
 
     void getMouseScreenPos(double& x, double& y) {
+        ZoneScoped;
         glfwGetCursorPos(window, &x, &y);
     }
 
     void setMouseScreenPos(double x, double y) {
+        ZoneScoped;
         // Tell GLFW to move the cursor and then manually fire the event
         glfwSetCursorPos(window, x, y);
         ImGui_ImplGlfw_CursorPosCallback(window, x, y);
@@ -235,6 +243,7 @@ namespace backend {
     int renderLoop() {
         // Main loop
         while (!glfwWindowShouldClose(window)) {
+            FrameMark;
             glfwPollEvents();
 
             beginFrame();
@@ -289,12 +298,14 @@ namespace backend {
             }
 
             render();
+
         }
 
         return 0;
     }
 
     int end() {
+        ZoneScoped;
         // Cleanup
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();

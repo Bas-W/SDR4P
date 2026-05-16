@@ -2,6 +2,7 @@
 #include <gui/gui.h>
 #include <core.h>
 #include <gui/style.h>
+#include "Tracy.hpp"
 
 namespace thememenu {
     int themeId;
@@ -9,6 +10,7 @@ namespace thememenu {
     std::string themeNamesTxt;
 
     void init(std::string resDir) {
+        ZoneScoped;
         // TODO: Not hardcode theme directory
         gui::themeManager.loadThemesFromDir(resDir + "/themes/");
         core::configManager.acquire();

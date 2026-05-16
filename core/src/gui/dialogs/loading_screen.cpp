@@ -6,15 +6,18 @@
 #include <credits.h>
 #include <gui/gui.h>
 #include <backend.h>
+#include "Tracy.hpp"
 
 namespace LoadingScreen {
     ImVec2 imageSize(128.0f, 128.0f);
 
     void init() {
+        ZoneScoped;
         imageSize = ImVec2(128.0f * style::uiScale, 128.0f * style::uiScale);
     }
 
     void show(std::string msg) {
+        ZoneScoped;
         backend::beginFrame();
 
         ImGui::Begin("Main", NULL, WINDOW_FLAGS);
