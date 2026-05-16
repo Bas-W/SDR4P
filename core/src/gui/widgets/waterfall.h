@@ -16,8 +16,8 @@ namespace ImGui {
     constexpr ImU32 VFO_TextBgCol = IM_COL32(50, 50, 50, 200);
     constexpr ImU32 VFO_HoverCol = IM_COL32(200, 200, 200, 180);
     constexpr ImU32 VFO_HighlightCol = IM_COL32(225, 225, 225, 200);
-    constexpr ImU32 VFO_DefaultSelectedLineCol = IM_COL32(255, 0, 0, 255);
-    constexpr ImU32 VFO_DefaultUnselectedLineCol = IM_COL32(255, 255, 0, 255);
+    constexpr ImU32 VFO_DefaultSelectedLineCol = IM_COL32(255, 30, 50, 255);
+    constexpr ImU32 VFO_DefaultUnselectedLineCol = IM_COL32(255, 255, 50, 255);
     constexpr float VFO_DefaultNametagPadding = 3.0f;
     constexpr float VFO_DefaultLineSegLength = 15.0f;
 
