@@ -68,12 +68,8 @@ inline void printAndScale(double freq, char* buf) {
 inline void doZoom(int offset, int width, int inSize, int outSize, float* in, float* out) {
     ZoneScoped;
     // NOTE: REMOVE THAT SHIT, IT'S JUST A HACKY FIX
-    if (offset < 0) {
-        offset = 0;
-    }
-    if (width > 524288) {
-        width = 524288;
-    }
+    offset = std::max(offset, 0);
+    width = std::min(width, 524288);
 
     float factor = (float)width / (float)outSize;
     float sFactor = ceilf(factor);
@@ -85,9 +81,7 @@ inline void doZoom(int offset, int width, int inSize, int outSize, float* in, fl
         maxVal = -INFINITY;
         sId = (int)id;
         uFactor = (sId + sFactor > inSize) ? sFactor - ((sId + sFactor) - inSize) : sFactor;
-        for (int j = 0; j < uFactor; j++) {
-            if (in[sId + j] > maxVal) { maxVal = in[sId + j]; }
-        }
+        maxVal = *std::max_element(in + sId, in + sId + static_cast<int>(uFactor));
         out[i] = maxVal;
         id += factor;
     }
