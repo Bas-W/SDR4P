@@ -7,6 +7,7 @@
 #include <utils/flog.h>
 #include <gui/gui.h>
 #include <gui/style.h>
+#include "utils/glsl_shaders.h"
 #include "Tracy.hpp"
 
 float DEFAULT_COLOR_MAP[][3] = {
@@ -110,10 +111,35 @@ namespace ImGui {
 
         updatePallette(DEFAULT_COLOR_MAP, 13);
     }
+    WaterFall::~WaterFall() {
+    }
 
     void WaterFall::init() {
         ZoneScoped;
+
         glGenTextures(1, &textureId);
+        glBindTexture(GL_TEXTURE_2D, textureId);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, dataWidth, waterfallHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+        glGenBuffers(1, &fftSSBO);
+
+        // TODO: fix file path
+        glsl_shaders::compile_shader(&computeColorizeShader, GL_COMPUTE_SHADER, "../core/src/gui/widgets/waterfall_shaders/colorize.comp");
+        glsl_shaders::compile_shader(&computeRasterizeShader, GL_COMPUTE_SHADER, "../core/src/gui/widgets/waterfall_shaders/rasterize.comp");
+
+        computeColorizeProg = glCreateProgram();
+        glAttachShader(computeColorizeProg, computeColorizeShader);
+        glLinkProgram(computeColorizeProg);
+
+        computeRasterizeProg = glCreateProgram();
+        glAttachShader(computeRasterizeProg, computeRasterizeShader);
+        glLinkProgram(computeRasterizeProg);
     }
 
     void WaterFall::drawFFT() {
@@ -599,7 +625,11 @@ namespace ImGui {
 
     void WaterFall::updateWaterfallFb() {
         ZoneScoped;
-        if (!waterfallVisible || rawFFTs == NULL) {
+        if (_GPUShaderEnabled) {
+            updateFftSSBO();
+            return;
+        }
+        if (!waterfallVisible || rawFFTs == NULL || fftLines < 0) {
             return;
         }
         double offsetRatio = viewOffset / (wholeBandwidth / 2.0);
@@ -610,24 +640,35 @@ namespace ImGui {
         float pixel;
         float dataRange = waterfallMax - waterfallMin;
         int count = std::min<float>(waterfallHeight, fftLines);
-        if (rawFFTs != NULL && fftLines >= 0) {
-            for (int i = 0; i < count; i++) {
-                drawDataSize = (viewBandwidth / wholeBandwidth) * rawFFTSize;
-                drawDataStart = (((double)rawFFTSize / 2.0) * (offsetRatio + 1)) - (drawDataSize / 2);
-                doZoom(drawDataStart, drawDataSize, rawFFTSize, dataWidth, &rawFFTs[((i + currentFFTLine) % waterfallHeight) * rawFFTSize], tempData);
-                for (int j = 0; j < dataWidth; j++) {
-                    pixel = (std::clamp<float>(tempData[j], waterfallMin, waterfallMax) - waterfallMin) / dataRange;
-                    waterfallFb[(i * dataWidth) + j] = waterfallPallet[(int)(pixel * (WATERFALL_RESOLUTION - 1))];
-                }
+        for (int i = 0; i < count; i++) {
+            drawDataSize = (viewBandwidth / wholeBandwidth) * rawFFTSize;
+            drawDataStart = (((double)rawFFTSize / 2.0) * (offsetRatio + 1)) - (drawDataSize / 2);
+            doZoom(drawDataStart, drawDataSize, rawFFTSize, dataWidth, &rawFFTs[((i + currentFFTLine) % waterfallHeight) * rawFFTSize], tempData);
+            for (int j = 0; j < dataWidth; j++) {
+                pixel = (std::clamp<float>(tempData[j], waterfallMin, waterfallMax) - waterfallMin) / dataRange;
+                waterfallFb[(i * dataWidth) + j] = waterfallPallet[(int)(pixel * (WATERFALL_RESOLUTION - 1))];
             }
+        }
 
-            for (int i = count; i < waterfallHeight; i++) {
-                for (int j = 0; j < dataWidth; j++) {
-                    waterfallFb[(i * dataWidth) + j] = (uint32_t)255 << 24;
-                }
+        for (int i = count; i < waterfallHeight; i++) {
+            for (int j = 0; j < dataWidth; j++) {
+                waterfallFb[(i * dataWidth) + j] = (uint32_t)255 << 24;
             }
         }
         delete[] tempData;
+        waterfallUpdate = true;
+    }
+
+    void WaterFall::updateFftSSBO() {
+        ZoneScoped;
+        if (!waterfallVisible || rawFFTs == NULL || fftLines < 0) {
+            return;
+        }
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, fftSSBO);
+        glBufferData(GL_SHADER_STORAGE_BUFFER, std::min<float>(waterfallHeight, fftLines) * rawFFTSize * sizeof(float), rawFFTs, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
         waterfallUpdate = true;
     }
 
@@ -706,11 +747,43 @@ namespace ImGui {
     void WaterFall::updateWaterfallTexture() {
         ZoneScoped;
         std::lock_guard<std::mutex> lck(texMtx);
-        glBindTexture(GL_TEXTURE_2D, textureId);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, dataWidth, waterfallHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, (uint8_t*)waterfallFb);
+
+        if (_GPUShaderEnabled) {
+            // bind output image
+            glBindImageTexture(0, textureId, 0, GL_FALSE, 0, GL_READ_WRITE, GL_RGBA8);
+
+            // bind input buffer
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, fftSSBO);
+
+            // dispatch
+            glUseProgram(computeRasterizeProg);
+
+            glUniform1i(glGetUniformLocation(computeRasterizeProg, "rawFFTSize"), rawFFTSize);
+            glUniform1i(glGetUniformLocation(computeRasterizeProg, "waterfallHeight"), waterfallHeight);
+            glUniform1i(glGetUniformLocation(computeRasterizeProg, "currentFFTLine"), currentFFTLine);
+
+            glUniform1i(glGetUniformLocation(computeRasterizeProg, "dataWidth"), dataWidth);
+
+            glUniform1f(glGetUniformLocation(computeRasterizeProg, "waterfallMin"), waterfallMin);
+            glUniform1f(glGetUniformLocation(computeRasterizeProg, "waterfallMax"), waterfallMax);
+
+            glUniform1f(glGetUniformLocation(computeRasterizeProg, "wholeBandwidth"), wholeBandwidth);
+            glUniform1f(glGetUniformLocation(computeRasterizeProg, "viewBandwidth"), viewBandwidth);
+            glUniform1f(glGetUniformLocation(computeRasterizeProg, "viewOffset"), viewOffset);
+
+            GLuint groupsX = (dataWidth + 15) / 16;
+            GLuint groupsY = (waterfallHeight + 15) / 16;
+            glDispatchCompute(groupsX, groupsY, 1);
+            glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_SHADER_STORAGE_BARRIER_BIT);
+
+            glUseProgram(0);
+        } else {
+            glBindTexture(GL_TEXTURE_2D, textureId);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, dataWidth, waterfallHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, (uint8_t*)waterfallFb);
+        }
     }
 
     void WaterFall::onPositionChange() {
@@ -904,13 +977,17 @@ namespace ImGui {
 
         if (waterfallVisible) {
             doZoom(drawDataStart, drawDataSize, rawFFTSize, dataWidth, &rawFFTs[currentFFTLine * rawFFTSize], latestFFT);
-            memmove(&waterfallFb[dataWidth], waterfallFb, dataWidth * (waterfallHeight - 1) * sizeof(uint32_t));
-            float pixel;
-            float dataRange = waterfallMax - waterfallMin;
-            for (int j = 0; j < dataWidth; j++) {
-                pixel = (std::clamp<float>(latestFFT[j], waterfallMin, waterfallMax) - waterfallMin) / dataRange;
-                int id = (int)(pixel * (WATERFALL_RESOLUTION - 1));
-                waterfallFb[j] = waterfallPallet[id];
+            if (_GPUShaderEnabled) {
+                updateFftSSBO();
+            } else {
+                memmove(&waterfallFb[dataWidth], waterfallFb, dataWidth * (waterfallHeight - 1) * sizeof(uint32_t));
+                float pixel;
+                float dataRange = waterfallMax - waterfallMin;
+                for (int j = 0; j < dataWidth; j++) {
+                    pixel = (std::clamp<float>(latestFFT[j], waterfallMin, waterfallMax) - waterfallMin) / dataRange;
+                    int id = (int)(pixel * (WATERFALL_RESOLUTION - 1));
+                    waterfallFb[j] = waterfallPallet[id];
+                }
             }
             waterfallUpdate = true;
         }
@@ -1112,6 +1189,11 @@ namespace ImGui {
         ZoneScoped;
         std::lock_guard<std::recursive_mutex> lck(buf_mtx);
         _fullUpdate = fullUpdate;
+    }
+    void WaterFall::setGPUShaderEnabled(bool enabled) {
+        ZoneScoped;
+        std::lock_guard<std::recursive_mutex> lck(buf_mtx);
+        _GPUShaderEnabled = enabled;
     }
 
     void WaterFall::setWaterfallMin(float min) {

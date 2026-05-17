@@ -1,5 +1,8 @@
 #pragma once
 
+#include "glad/gl.h"
+#include <GLFW/glfw3.h>
+/*
 #if defined(_WIN32)
 #include <windows.h>
 #include <GL/gl.h>
@@ -11,3 +14,4 @@
 #else
 #include <GL/gl.h>
 #endif
+*/

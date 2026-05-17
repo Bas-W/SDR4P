@@ -1,10 +1,10 @@
 #include <backend.h>
 #include "imgui.h"
+#include <utils/opengl_include_code.h>
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
 #include <utils/flog.h>
-#include <utils/opengl_include_code.h>
 #include <version.h>
 #include <core.h>
 #include <filesystem>
@@ -95,6 +95,12 @@ namespace backend {
         if (window == NULL)
             return 1;
         glfwMakeContextCurrent(window);
+        int gladVersion = !gladLoadGL(glfwGetProcAddress);
+        if (gladVersion <= 0) {
+            flog::error("Failed to initialize GLAD");
+            return -1;
+        }
+        flog::info("GLAD version: {}", gladVersion);
     #else
         const char* glsl_version = "#version 120";
         monitor = NULL;
@@ -116,6 +122,12 @@ namespace backend {
             }
             flog::info("Using OpenGL {0}.{1}{2}", OPENGL_VERSIONS_MAJOR[i], OPENGL_VERSIONS_MINOR[i], OPENGL_VERSIONS_IS_ES[i] ? " ES" : "");
             glfwMakeContextCurrent(window);
+            int gladVersion = gladLoadGL(glfwGetProcAddress);
+            if (gladVersion <= 0) {
+                flog::error("Failed to initialize GLAD");
+                return -1;
+            }
+            flog::info("GLAD version: {}", gladVersion);
             break;
         }
 
@@ -173,7 +185,8 @@ namespace backend {
 
         // Setup Dear ImGui context
         IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
+        ImGuiContext* ctx = ImGui::CreateContext();
+        ImGui::SetCurrentContext(ctx);
         ImGuiIO& io = ImGui::GetIO();
         (void)io;
         io.IniFilename = NULL;

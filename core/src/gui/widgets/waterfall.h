@@ -103,6 +103,8 @@ namespace ImGui {
     public:
         WaterFall();
 
+        ~WaterFall();
+
         void init();
 
         void draw();
@@ -155,6 +157,8 @@ namespace ImGui {
         void setRawFFTSize(int size);
 
         void setFullWaterfallUpdate(bool fullUpdate);
+
+        void setGPUShaderEnabled(bool enabled);
 
         void setBandPlanPos(int pos);
 
@@ -249,6 +253,7 @@ namespace ImGui {
         void onPositionChange();
         void onResize();
         void updateWaterfallFb();
+        void updateFftSSBO();
         void updateWaterfallTexture();
         void updateAllVFOs(bool checkRedrawRequired = false);
         bool calculateVFOSignalInfo(float* fftLine, WaterfallVFO* vfo, float& strength, float& snr);
@@ -267,6 +272,11 @@ namespace ImGui {
         ImGuiWindow* window;
 
         GLuint textureId;
+        GLuint fftSSBO;
+        GLuint computeColorizeShader;
+        GLuint computeRasterizeShader;
+        GLuint computeColorizeProg;
+        GLuint computeRasterizeProg;
 
         std::recursive_mutex buf_mtx;
         std::recursive_mutex latestFFTMtx;
@@ -323,6 +333,7 @@ namespace ImGui {
         bool bandplanVisible = false;
 
         bool _fullUpdate = true;
+        bool _GPUShaderEnabled = false;
 
         int bandPlanPos = BANDPLAN_POS_BOTTOM;
 

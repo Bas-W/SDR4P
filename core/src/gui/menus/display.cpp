@@ -13,6 +13,7 @@
 namespace displaymenu {
     bool showWaterfall;
     bool fullWaterfallUpdate = true;
+    bool waterfallGPUShaderEnabled = false;
     int colorMapId = 0;
     std::vector<std::string> colorMapNames;
     std::string colorMapNamesTxt = "";
@@ -137,6 +138,11 @@ namespace displaymenu {
             core::configManager.acquire();
             core::configManager.conf["fullWaterfallUpdate"] = fullWaterfallUpdate;
             core::configManager.release(true);
+        }
+
+        if (ImGui::Checkbox("Waterfall GPU mode##_sdrpp", &waterfallGPUShaderEnabled)) {
+            gui::waterfall.setGPUShaderEnabled(waterfallGPUShaderEnabled);
+            // TODO: update config
         }
 
         if (ImGui::Checkbox("Lock Menu Order##_sdrpp", &gui::menu.locked)) {
