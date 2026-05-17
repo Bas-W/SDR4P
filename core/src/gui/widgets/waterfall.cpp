@@ -1257,7 +1257,8 @@ namespace ImGui {
         latestFFTMtx.unlock();
     }
 
-    void drawDottedLineVert(ImGuiWindow* window, ImVec2 start, ImVec2 end, ImU32 color, float lineSegLength, float thickness) {
+    // Meh, only for vertical lines
+    void drawDottedLineVert(ImGuiWindow* window, ImVec2 start, ImVec2 end, ImU32 color, float thickness, float lineSegLength) {
         ZoneScoped;
         int lineSegCount = ceilf((end.y - start.y) / VFO_DefaultLineSegLength);
         for (int i = 0; i < lineSegCount; i++) {
@@ -1468,16 +1469,21 @@ namespace ImGui {
 
         // Edge indicators
         drawDottedLineVert(window, ImVec2(rectMin.x, rectMin.y), ImVec2(rectMin.x, rectMax.y),
-            (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+            (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT, style::uiScale);
         drawDottedLineVert(window, ImVec2(rectMax.x, rectMin.y), ImVec2(rectMax.x, rectMax.y),
-            (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+            (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT, style::uiScale);
 
         if (mouseInWf) {
             window->DrawList->AddRectFilled(wfRectMin, wfRectMax, rectCol);
             drawDottedLineVert(window, ImVec2(wfRectMin.x, wfRectMin.y), ImVec2(wfRectMin.x, wfRectMax.y),
-                (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+                (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT, style::uiScale);
             drawDottedLineVert(window, ImVec2(wfRectMax.x, wfRectMin.y), ImVec2(wfRectMax.x, wfRectMax.y),
-                (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+                (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT, style::uiScale);
+
+            drawDottedLineVert(window, ImVec2(wfRectMin.x + style::uiScale, wfRectMin.y + style::uiScale), ImVec2(wfRectMin.x + style::uiScale, wfRectMax.y),
+                (ImU32)0 | 0xff << IM_COL32_A_SHIFT, style::uiScale);
+            drawDottedLineVert(window, ImVec2(wfRectMax.x + style::uiScale, wfRectMin.y + style::uiScale), ImVec2(wfRectMax.x + style::uiScale, wfRectMax.y),
+                (ImU32)0 | 0xff << IM_COL32_A_SHIFT, style::uiScale);
         }
 
         if (lineVisible) {
