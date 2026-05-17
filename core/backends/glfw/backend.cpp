@@ -214,7 +214,7 @@ namespace backend {
     }
 
     void render(bool vsync) {
-        ZoneScopedN("Render");
+        ZoneScoped;
         // Rendering
         ImGui::Render();
         int display_w, display_h;

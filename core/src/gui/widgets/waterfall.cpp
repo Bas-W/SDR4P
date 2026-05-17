@@ -66,7 +66,7 @@ inline void printAndScale(double freq, char* buf) {
 }
 
 inline void doZoom(int offset, int width, int inSize, int outSize, float* in, float* out) {
-ZoneScoped;
+    ZoneScoped;
     // NOTE: REMOVE THAT SHIT, IT'S JUST A HACKY FIX
     if (offset < 0) {
         offset = 0;
@@ -167,6 +167,7 @@ namespace ImGui {
 
         // Data
         if (latestFFT != NULL && fftLines != 0) {
+            ZoneScopedN("drawFFT_drawData");
             for (int i = 1; i < dataWidth; i++) {
                 double aPos = fftAreaMax.y - ((latestFFT[i - 1] - fftMin) * scaleFactor);
                 double bPos = fftAreaMax.y - ((latestFFT[i] - fftMin) * scaleFactor);
@@ -181,6 +182,7 @@ namespace ImGui {
 
         // Hold
         if (fftHold && latestFFT != NULL && latestFFTHold != NULL && fftLines != 0) {
+            ZoneScopedN("drawFFT_drawHold");
             for (int i = 1; i < dataWidth; i++) {
                 double aPos = fftAreaMax.y - ((latestFFTHold[i - 1] - fftMin) * scaleFactor);
                 double bPos = fftAreaMax.y - ((latestFFTHold[i] - fftMin) * scaleFactor);

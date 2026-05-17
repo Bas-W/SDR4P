@@ -275,6 +275,7 @@ void MainWindow::draw() {
     // Handle VFO movement
     if (vfo != NULL) {
         if (vfo->centerOffsetChanged) {
+            ZoneScopedN("draw_vfoMoved");
             if (tuningMode == tuner::TUNER_MODE_CENTER) {
                 tuner::tune(tuner::TUNER_MODE_CENTER, gui::waterfall.selectedVFO, gui::waterfall.getCenterFrequency() + vfo->generalOffset);
             }
@@ -290,6 +291,7 @@ void MainWindow::draw() {
 
     // Handle selection of another VFO
     if (gui::waterfall.selectedVFOChanged) {
+        ZoneScopedN("draw_vfoChanged");
         gui::freqSelect.setFrequency((vfo != NULL) ? (vfo->generalOffset + gui::waterfall.getCenterFrequency()) : gui::waterfall.getCenterFrequency());
         gui::waterfall.selectedVFOChanged = false;
         gui::freqSelect.frequencyChanged = false;
@@ -297,6 +299,7 @@ void MainWindow::draw() {
 
     // Handle change in selected frequency
     if (gui::freqSelect.frequencyChanged) {
+        ZoneScopedN("draw_freqChanged");
         gui::freqSelect.frequencyChanged = false;
         tuner::tune(tuningMode, gui::waterfall.selectedVFO, gui::freqSelect.frequency);
         if (vfo != NULL) {
@@ -314,6 +317,7 @@ void MainWindow::draw() {
 
     // Handle dragging the frequency scale
     if (gui::waterfall.centerFreqMoved) {
+        ZoneScopedN("draw_centerFreqChanged");
         gui::waterfall.centerFreqMoved = false;
         sigpath::sourceManager.tune(gui::waterfall.getCenterFrequency());
         if (vfo != NULL) {
