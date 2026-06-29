@@ -51,24 +51,38 @@ void MainWindow::init() {
     gui::menu.order.clear();
     for (auto& elem : menuElements) {
         if (!elem.contains("name")) {
-            flog::error("Menu element is missing name key");
+            flog::error("Menu element is missing 'name' key");
             continue;
         }
         if (!elem["name"].is_string()) {
-            flog::error("Menu element name isn't a string");
+            flog::error("Menu element 'name' key isn't a string");
             continue;
         }
         if (!elem.contains("open")) {
-            flog::error("Menu element is missing open key");
+            flog::error("Menu element is missing 'open' key");
             continue;
         }
         if (!elem["open"].is_boolean()) {
-            flog::error("Menu element name isn't a string");
+            flog::error("Menu element 'open' key isn't a string");
             continue;
         }
+
+        if (!elem.contains("location")) {
+            flog::error("Menu element is missing 'location' key. Setting to default (left column)");
+            elem["location"] = Menu::MenuOption_Location::left;
+            goto endLocationKeyChecks;
+        }
+        if (!elem["location"].is_number_integer()) {
+            flog::error("Menu element 'location' key isn't an integer. Setting to default (left column)");
+            elem["location"] = Menu::MenuOption_Location::left;
+            goto endLocationKeyChecks;
+        }
+        endLocationKeyChecks:
+
         Menu::MenuOption_t opt;
         opt.name = elem["name"];
         opt.open = elem["open"];
+        opt.location = elem["location"];
         gui::menu.order.push_back(opt);
     }
 
@@ -481,18 +495,20 @@ void MainWindow::draw() {
 
     // Left Column
     if (showMenu) {
-        ImGui::Columns(3, "WindowColumns", false);
+        ImGui::Columns(4, "WindowColumns", false);
         ImGui::SetColumnWidth(0, menuWidth);
-        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - (60.0f * style::uiScale), 100.0f * style::uiScale));
+        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - rightMenuWidth - (60.0f * style::uiScale), 100.0f * style::uiScale));
         ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
+        ImGui::SetColumnWidth(3, rightMenuWidth);
         ImGui::BeginChild("Left Column");
 
-        if (gui::menu.draw(firstMenuRender)) {
+        if (gui::menu.draw(firstMenuRender, Menu::MenuOption_Location::left)) {
             core::configManager.acquire();
             json arr = json::array();
             for (int i = 0; i < gui::menu.order.size(); i++) {
                 arr[i]["name"] = gui::menu.order[i].name;
                 arr[i]["open"] = gui::menu.order[i].open;
+                arr[i]["location"] = gui::menu.order[i].location;
             }
             core::configManager.conf["menuElements"] = arr;
 
@@ -503,12 +519,6 @@ void MainWindow::draw() {
             }
 
             core::configManager.release(true);
-        }
-        if (startedWithMenuClosed) {
-            startedWithMenuClosed = false;
-        }
-        else {
-            firstMenuRender = false;
         }
 
         if (ImGui::CollapsingHeader("Debug")) {
@@ -542,19 +552,21 @@ void MainWindow::draw() {
     }
     else {
         // When hiding the menu bar
-        ImGui::Columns(3, "WindowColumns", false);
+        ImGui::Columns(4, "WindowColumns", false);
         ImGui::SetColumnWidth(0, 8 * style::uiScale);
-        ImGui::SetColumnWidth(1, winSize.x - ((8 + 60) * style::uiScale));
+        ImGui::SetColumnWidth(1, winSize.x - rightMenuWidth - ((8 + 60) * style::uiScale));
         ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
+        ImGui::SetColumnWidth(3, 8 * style::uiScale);
     }
 
-    // Right Column
+    // Center Column
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     ImGui::NextColumn();
     ImGui::PopStyleVar();
 
     ImGui::BeginChild("Waterfall");
 
+    // @TODO: add bottom toolbar?
     gui::waterfall.draw();
 
     ImGui::EndChild();
@@ -666,6 +678,40 @@ void MainWindow::draw() {
     }
 
     ImGui::EndChild();
+
+
+    if (showMenu) {
+        // Right column
+        ImGui::NextColumn();
+        ImGui::BeginChild("RightMenu");
+
+        if (gui::menu.draw(firstMenuRender, Menu::MenuOption_Location::right)) {
+            core::configManager.acquire();
+            json arr = json::array();
+            for (int i = 0; i < gui::menu.order.size(); i++) {
+                arr[i]["name"] = gui::menu.order[i].name;
+                arr[i]["open"] = gui::menu.order[i].open;
+                arr[i]["location"] = gui::menu.order[i].location;
+            }
+            core::configManager.conf["menuElements"] = arr;
+
+            // Update enabled and disabled modules
+            for (auto [_name, inst] : core::moduleManager.instances) {
+                if (!core::configManager.conf["moduleInstances"].contains(_name)) { continue; }
+                core::configManager.conf["moduleInstances"][_name]["enabled"] = inst.instance->isEnabled();
+            }
+
+            core::configManager.release(true);
+        }
+
+        ImGui::EndChild();
+    }
+
+    if (startedWithMenuClosed) {
+        startedWithMenuClosed = false;
+    } else {
+        firstMenuRender = false;
+    }
 
     gui::waterfall.setFFTMin(fftMin);
     gui::waterfall.setFFTMax(fftMax);

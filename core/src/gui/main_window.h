@@ -53,6 +53,7 @@ private:
     std::string audioStreamName = "";
     std::string sourceName = "";
     int menuWidth = 300;
+    int rightMenuWidth = 300;
     bool grabbingMenu = false;
     int newWidth = 300;
     int fftHeight = 300;
