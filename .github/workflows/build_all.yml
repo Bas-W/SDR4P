@@ -507,7 +507,7 @@ jobs:
           run: docker build --progress=plain -t android-sdr-kit .
 
         - name: Build
-          run: docker run --name build -v $GITHUB_WORKSPACE:/root/SDR4P android-sdr-kit /bin/bash -l -c "cd /root/SDR4P/android && gradle --info assembleDebug"
+          run: docker run --name build -v $GITHUB_WORKSPACE:/root/SDR4P android-sdr-kit /bin/bash -l -c "cd /root/SDR4P/android && ./gradlew clean && rm -rf app/.cxx && rm -rf app/build && ./gradlew assembleDebug --info"
 
         - name: Recover APK
           working-directory: ${{runner.workspace}}
