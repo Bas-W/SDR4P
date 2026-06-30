@@ -2,7 +2,6 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
 android {
-    namespace "org.sdr4p.sdr4p"
     compileSdkVersion 28
     buildToolsVersion "30.0.3"
     ndkVersion "25.1.8937393"
