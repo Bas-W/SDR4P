@@ -9,7 +9,7 @@ android {
         applicationId "org.sdr4p.sdr4p"
         minSdkVersion 28
         targetSdkVersion 28
-        versionCode 0
+        versionCode 2626000100
         versionName "0.1.0"
 
         externalNativeBuild {
