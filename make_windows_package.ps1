@@ -62,7 +62,7 @@ cp $build_dir/source_modules/rtl_tcp_source/Release/rtl_tcp_source.dll sdr4p_win
 cp $build_dir/source_modules/sdrplay_source/Release/sdrplay_source.dll sdr4p_windows_x64/modules/ -ErrorAction SilentlyContinue
 cp 'C:/Program Files/SDRplay/API/x64/sdrplay_api.dll' sdr4p_windows_x64/ -ErrorAction SilentlyContinue
 
-cp $build_dir/source_modules/sdr4p_server_source/Release/sdr4p_server_source.dll sdr4p_windows_x64/modules/
+cp $build_dir/source_modules/sdrpp_server_source/Release/sdrpp_server_source.dll sdr4p_windows_x64/modules/
 
 cp $build_dir/source_modules/spyserver_source/Release/spyserver_source.dll sdr4p_windows_x64/modules/
 

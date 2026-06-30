@@ -2,6 +2,7 @@ apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 
 android {
+    namespace "org.sdr4p.sdr4p"
     compileSdkVersion 28
     buildToolsVersion "30.0.3"
     ndkVersion "25.1.8937393"
@@ -9,8 +10,8 @@ android {
         applicationId "org.sdr4p.sdr4p"
         minSdkVersion 28
         targetSdkVersion 28
-        versionCode 2626000100
-        versionName "0.1.0"
+        versionCode 2626010
+        versionName "w26y26v0.1.0"
 
         externalNativeBuild {
             cmake {
