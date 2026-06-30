@@ -1,4 +1,4 @@
-package org.sdrpp.sdrpp;
+package org.sdr4p.sdr4p;
 
 import android.app.NativeActivity;
 import android.app.AlertDialog;
@@ -25,7 +25,7 @@ import androidx.core.content.PermissionChecker;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.io.*;
 
-private const val ACTION_USB_PERMISSION = "org.sdrpp.sdrpp.USB_PERMISSION";
+private const val ACTION_USB_PERMISSION = "org.sdr4p.sdr4p.USB_PERMISSION";
 
 private val usbReceiver = object : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -53,7 +53,7 @@ private val usbReceiver = object : BroadcastReceiver() {
 }
 
 class MainActivity : NativeActivity() {
-    private val TAG : String = "SDR++";
+    private val TAG : String = "SDR++++";
     public var usbManager : UsbManager? = null;
     public var SDR_device : UsbDevice? = null;
     public var SDR_conn : UsbDeviceConnection? = null;
