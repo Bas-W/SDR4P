@@ -6,11 +6,11 @@ android {
     buildToolsVersion "30.0.3"
     ndkVersion "25.1.8937393"
     defaultConfig {
-        applicationId "org.sdrpp.sdrpp"
+        applicationId "org.sdr4p.sdr4p"
         minSdkVersion 28
         targetSdkVersion 28
-        versionCode 1
-        versionName "1.2.1"
+        versionCode 0
+        versionName "0.1.0"
 
         externalNativeBuild {
             cmake {
