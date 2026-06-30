@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="org.sdrpp.sdrpp">
+    package="org.sdr4p.sdr4p">
 
     <application
-        android:label="SDR++"
+        android:label="SDR++++"
         android:allowBackup="false"
         android:fullBackupContent="false"
         android:hasCode="true">
 
         <activity
-            android:name="org.sdrpp.sdrpp.MainActivity"
+            android:name="org.sdr4p.sdr4p.MainActivity"
             android:icon="@mipmap/ic_launcher"
             android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
             android:configChanges="orientation|keyboardHidden|screenSize">

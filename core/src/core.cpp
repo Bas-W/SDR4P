@@ -62,7 +62,7 @@ namespace core {
 
 // main
 int sdrpp_main(int argc, char* argv[]) {
-    flog::info("SDR++ v" VERSION_STR);
+    flog::info("SDR4P v" VERSION_SDR4_STR ", based on SDR++ v" VERSION_STR " (Built at " __TIME__ ", " __DATE__ ")");
 
 #ifdef IS_MACOS_BUNDLE
     // If this is a MacOS .app, CD to the correct directory
@@ -283,7 +283,7 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["resourcesDirectory"] = root + "/res";
 #else
     defConfig["modulesDirectory"] = INSTALL_PREFIX "/lib/sdrpp/plugins";
-    defConfig["resourcesDirectory"] = INSTALL_PREFIX "/share/sdrpp";
+    defConfig["resourcesDirectory"] = INSTALL_PREFIX "/share/sdr4p";
 #endif
 
     // Load config
