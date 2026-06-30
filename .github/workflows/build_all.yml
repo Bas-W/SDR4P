@@ -573,18 +573,6 @@ jobs:
             name: sdr4p_all
             path: sdr4p_all/
 
-    update_nightly_release:
-        needs: [create_full_archive]
-        runs-on: ubuntu-latest
-        if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
-
-        steps:
-        - name: Download All Builds
-          uses: actions/download-artifact@v4
-
-        - name: Update Nightly
-          run: gh release upload nightly sdr4p_all/* -R ${{github.repository}} --clobber
-
     check_spelling:
         runs-on: ubuntu-latest
 
