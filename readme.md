@@ -1,25 +1,45 @@
-# SDR++++, an SDR++ expansion<br>
+# SDR++++, an SDR++ expansion
+![Screenshot](./wiki/UI_Screenshot.png)
+
+## Features
+**Features added by this fork:**
+* Improved bookmarks
+  * Bookmarks displayed on FFT / waterfall plot now stack instead of overlapping
+  * Bookmark color can be customized
+* VFO
+  * The VFO indicator now displays its name
+  * The VFO indicator is colored more clearly
+  * The VFO bandwidth indicator visibility is improved
+* Menu
+  * Added menu bar on right side [WIP]
+* FFT / waterfall plot
+  * Added ability to zoom using CTRL + mouse wheel
+
+**SDR++ features:**
+* Multi VFO
+* Wide hardware support (both through SoapySDR and dedicated modules)
+* SIMD accelerated DSP
+* Cross-platform (Windows, Linux, MacOS and BSD)
+* Full waterfall update when possible. Makes browsing signals easier and more pleasant
+* Modular design (easily write your own plugins)
 
 
-![Screenshot](https://i.imgur.com/Ter2MQJ.png)
-SDR++ is a cross-platform and open source SDR software with the aim of being bloat free and simple to use.
+## Manual
+See the [manual](./wiki/manual.md) for information regarding controls and usage of this software. 
 
-# Goal
+## Goal
+This fork serves as a place to keep my modifications to SDR++, mostly UI/UX related.
 
-This fork serves a place to keep my modifications, mostly UI/UX related, to SDR++.  
-
-The intention is not to make large, breaking changes to the codebase.
-It should remain close the upstream and any new upstream functionality should be mirrored here.
-
-# Credits
-
-## SDR++
-
-* [Alexandre Rouma](https://github.com/AlexandreRouma)
+## Credits
+[Alexandre Rouma](https://github.com/AlexandreRouma), developer of SDR++.
 
 See [the SDR++ repo](https://github.com/AlexandreRouma/SDRPlusPlus) for a full list of upstream contributors.
 
-## Libraries used
+### Libraries used
+* [ImPlot](https://github.com/epezent/implot)
+* [Tracy Profiler](https://github.com/wolfpld/tracy)
+
+### Libraries used upstream
 
 * [SoapySDR (PothosWare)](https://github.com/pothosware/SoapySDR)
 * [Dear ImGui (ocornut)](https://github.com/ocornut/imgui)

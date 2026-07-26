@@ -24,7 +24,7 @@ namespace credits {
         ImGui::BeginPopupModal("Credits", NULL, ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove);
 
         ImGui::PushFont(style::hugeFont);
-        ImGui::TextUnformatted("SDR++          ");
+        ImGui::TextUnformatted("SDR++++        ");
         ImGui::PopFont();
         ImGui::SameLine();
         ImGui::Image(icons::LOGO, imageSize);
@@ -32,7 +32,7 @@ namespace credits {
         ImGui::Spacing();
         ImGui::Spacing();
 
-        ImGui::TextUnformatted("This software is brought to you by Alexandre Rouma (ON5RYZ) with the help of\n\n");
+        ImGui::TextUnformatted("This is a fork of the SDR++ project containing modifications made by Bas W.\nSDR++ is brought to you by Alexandre Rouma (ON5RYZ) with the help of:\n\n");
 
         ImGui::Columns(4, "CreditColumns", true);
 
@@ -45,6 +45,11 @@ namespace credits {
         ImGui::TextUnformatted("Libraries");
         for (int i = 0; i < sdrpp_credits::libraryCount; i++) {
             ImGui::BulletText("%s", sdrpp_credits::libraries[i]);
+        }
+        ImGui::Spacing();
+        ImGui::TextUnformatted("Added by sdr4p fork");
+        for (int i = 0; i < sdr4p_credits::libraryCount; i++) {
+            ImGui::BulletText("%s", sdr4p_credits::libraries[i]);
         }
 
         ImGui::NextColumn();

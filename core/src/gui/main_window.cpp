@@ -202,6 +202,8 @@ void MainWindow::init() {
     double frequency = core::configManager.conf["frequency"];
 
     showMenu = core::configManager.conf["showMenu"];
+    showRightMenu = core::configManager.conf["showRightMenu"];
+
     startedWithMenuClosed = !showMenu;
 
     gui::freqSelect.setFrequency(frequency);
@@ -493,7 +495,7 @@ void MainWindow::draw() {
     // Process menu keybinds
     displaymenu::checkKeybinds();
 
-    // Left Column
+    // Left menu Column
     if (showMenu) {
         ImGui::Columns(4, "WindowColumns", false);
         ImGui::SetColumnWidth(0, menuWidth);
@@ -554,7 +556,7 @@ void MainWindow::draw() {
         // When hiding the menu bar
         ImGui::Columns(4, "WindowColumns", false);
         ImGui::SetColumnWidth(0, 8 * style::uiScale);
-        ImGui::SetColumnWidth(1, winSize.x - rightMenuWidth - ((8 + 60) * style::uiScale));
+        ImGui::SetColumnWidth(1, winSize.x - (8 + 60) * style::uiScale);
         ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
         ImGui::SetColumnWidth(3, 8 * style::uiScale);
     }
@@ -600,34 +602,50 @@ void MainWindow::draw() {
         // Handle scrollwheel
         int wheel = ImGui::GetIO().MouseWheel;
         if (wheel != 0 && (gui::waterfall.mouseInFFT || gui::waterfall.mouseInWaterfall)) {
-            double nfreq;
-            if (vfo != NULL) {
-                // Select factor depending on modifier keys
-                double interval;
-                if (ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
-                    interval = vfo->snapInterval * 10.0;
-                }
-                else if (ImGui::IsKeyDown(ImGuiKey_LeftAlt)) {
-                    interval = vfo->snapInterval * 0.1;
-                }
-                else {
-                    interval = vfo->snapInterval;
-                }
+            if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl)) {
+                bw = std::clamp<double>(bw - wheel / 10.0, 0.0, 1.0);
+                double factor = bw * bw;
 
-                nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset + (interval * wheel);
-                nfreq = roundl(nfreq / interval) * interval;
+                // Map 0.0 -> 1.0 to 1000.0 -> bandwidth
+                double wfBw = gui::waterfall.getBandwidth();
+                double delta = wfBw - 1000.0;
+                double finalBw = std::min<double>(1000.0 + (factor * delta), wfBw);
+
+                gui::waterfall.setViewBandwidth(finalBw);
+                if (vfo != NULL) {
+                    gui::waterfall.setViewOffset(vfo->centerOffset); // center vfo on screen
+                }
             }
             else {
-                nfreq = gui::waterfall.getCenterFrequency() - (gui::waterfall.getViewBandwidth() * wheel / 20.0);
+                double nfreq;
+                if (vfo != NULL) {
+                    // Select factor depending on modifier keys
+                    double interval;
+                    if (ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
+                        interval = vfo->snapInterval * 10.0;
+                    }
+                    else if (ImGui::IsKeyDown(ImGuiKey_LeftAlt)) {
+                        interval = vfo->snapInterval * 0.1;
+                    }
+                    else {
+                        interval = vfo->snapInterval;
+                    }
+
+                    nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset + (interval * wheel);
+                    nfreq = roundl(nfreq / interval) * interval;
+                }
+                else {
+                    nfreq = gui::waterfall.getCenterFrequency() - (gui::waterfall.getViewBandwidth() * wheel / 20.0);
+                }
+                tuner::tune(tuningMode, gui::waterfall.selectedVFO, nfreq);
+                gui::freqSelect.setFrequency(nfreq);
+                core::configManager.acquire();
+                core::configManager.conf["frequency"] = gui::waterfall.getCenterFrequency();
+                if (vfo != NULL) {
+                    core::configManager.conf["vfoOffsets"][gui::waterfall.selectedVFO] = vfo->generalOffset;
+                }
+                core::configManager.release(true);
             }
-            tuner::tune(tuningMode, gui::waterfall.selectedVFO, nfreq);
-            gui::freqSelect.setFrequency(nfreq);
-            core::configManager.acquire();
-            core::configManager.conf["frequency"] = gui::waterfall.getCenterFrequency();
-            if (vfo != NULL) {
-                core::configManager.conf["vfoOffsets"][gui::waterfall.selectedVFO] = vfo->generalOffset;
-            }
-            core::configManager.release(true);
         }
     }
 
@@ -680,8 +698,8 @@ void MainWindow::draw() {
     ImGui::EndChild();
 
 
-    if (showMenu) {
-        // Right column
+    // Right menu column
+    if (showMenu && showRightMenu) {
         ImGui::NextColumn();
         ImGui::BeginChild("RightMenu");
 
