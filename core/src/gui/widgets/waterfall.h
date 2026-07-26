@@ -21,7 +21,7 @@ namespace ImGui {
     constexpr float VFO_DefaultNametagPadding = 3.0f;
     constexpr float VFO_DefaultLineSegLength = 15.0f;
 
-    void drawDottedLineVert(ImGuiWindow* window, ImVec2 start, ImVec2 end, ImU32 color, float lineSegLength = VFO_DefaultLineSegLength, float thickness = style::uiScale);
+    void drawDottedLineVert(ImGuiWindow* window, ImVec2 start, ImVec2 end, ImU32 color, float thickness, float lineSegLength = VFO_DefaultLineSegLength);
 
     class WaterfallVFO {
     public:

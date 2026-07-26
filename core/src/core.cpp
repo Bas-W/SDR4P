@@ -62,7 +62,7 @@ namespace core {
 
 // main
 int sdrpp_main(int argc, char* argv[]) {
-    flog::info("SDR4P v" VERSION_SDR4_STR ", based on SDR++ v" VERSION_STR " (Built at " __TIME__ ", " __DATE__ ")");
+    flog::info("SDR4P v" VERSION_SDR4P_STR ", based on SDR++ v" VERSION_STR " (Built at " __TIME__ ", " __DATE__ ")");
 
 #ifdef IS_MACOS_BUNDLE
     // If this is a MacOS .app, CD to the correct directory
@@ -108,11 +108,11 @@ int sdrpp_main(int argc, char* argv[]) {
 
     // ======== DEFAULT CONFIG ========
     json defConfig;
-    defConfig["bandColors"]["amateur"] = "#FF0000FF";
-    defConfig["bandColors"]["aviation"] = "#00FF00FF";
-    defConfig["bandColors"]["broadcast"] = "#0000FFFF";
-    defConfig["bandColors"]["marine"] = "#00FFFFFF";
-    defConfig["bandColors"]["military"] = "#FFFF00FF";
+    defConfig["bandColors"]["amateur"] = "#E81B55FF";
+    defConfig["bandColors"]["aviation"] = "#51FF51FF";
+    defConfig["bandColors"]["broadcast"] = "#4DA7FFFF";
+    defConfig["bandColors"]["marine"] = "#4DFFCFFF";
+    defConfig["bandColors"]["military"] = "#FFd41BFF";
     defConfig["bandPlan"] = "General";
     defConfig["bandPlanEnabled"] = true;
     defConfig["bandPlanPos"] = 0;
@@ -249,6 +249,11 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["selectedOffset"] = "None";
     defConfig["manualOffset"] = 0.0;
     defConfig["showMenu"] = true;
+#ifdef __ANDROID__
+    defConfig["showRightMenu"] = false;
+#else
+    defConfig["showRightMenu"] = true;
+#endif
     defConfig["showWaterfall"] = true;
     defConfig["source"] = "";
     defConfig["decimation"] = 1;

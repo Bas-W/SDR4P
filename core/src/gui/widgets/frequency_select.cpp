@@ -10,6 +10,8 @@
 #endif
 #include <imgui/imgui_internal.h>
 
+#include "Tracy.hpp"
+
 bool isInArea(ImVec2 val, ImVec2 min, ImVec2 max) {
     return val.x >= min.x && val.x < max.x && val.y >= min.y && val.y < max.y;
 }
@@ -18,12 +20,14 @@ FrequencySelect::FrequencySelect() {
 }
 
 void FrequencySelect::init() {
+    ZoneScoped;
     for (int i = 0; i < 12; i++) {
         digits[i] = 0;
     }
 }
 
 void FrequencySelect::onPosChange() {
+    ZoneScoped;
     ImVec2 digitSz = ImGui::CalcTextSize("0");
     ImVec2 commaSz = ImGui::CalcTextSize(".");
     int digitHeight = digitSz.y;
@@ -43,6 +47,7 @@ void FrequencySelect::onPosChange() {
 }
 
 void FrequencySelect::incrementDigit(int i) {
+    ZoneScoped;
     if (i < 0) {
         return;
     }
@@ -57,6 +62,7 @@ void FrequencySelect::incrementDigit(int i) {
 }
 
 void FrequencySelect::decrementDigit(int i) {
+    ZoneScoped;
     if (i < 0) {
         return;
     }
@@ -83,6 +89,7 @@ void FrequencySelect::decrementDigit(int i) {
 }
 
 void FrequencySelect::moveCursorToDigit(int i) {
+    ZoneScoped;
     double xpos, ypos;
     backend::getMouseScreenPos(xpos, ypos);
     double nxpos = (digitTopMaxs[i].x + digitTopMins[i].x) / 2.0;
@@ -90,6 +97,7 @@ void FrequencySelect::moveCursorToDigit(int i) {
 }
 
 void FrequencySelect::draw() {
+    ZoneScoped;
     auto window = ImGui::GetCurrentWindow();
     auto io = ImGui::GetIO();
     widgetPos = ImGui::GetWindowContentRegionMin();
@@ -246,6 +254,7 @@ void FrequencySelect::draw() {
 }
 
 void FrequencySelect::setFrequency(int64_t freq) {
+    ZoneScoped;
     freq = std::max<int64_t>(0, freq);
     int i = 11;
     for (uint64_t f = freq; i >= 0; i--) {

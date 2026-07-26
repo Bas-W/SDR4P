@@ -66,14 +66,10 @@ inline void printAndScale(double freq, char* buf) {
 }
 
 inline void doZoom(int offset, int width, int inSize, int outSize, float* in, float* out) {
-ZoneScoped;
+    ZoneScoped;
     // NOTE: REMOVE THAT SHIT, IT'S JUST A HACKY FIX
-    if (offset < 0) {
-        offset = 0;
-    }
-    if (width > 524288) {
-        width = 524288;
-    }
+    offset = std::max(offset, 0);
+    width = std::min(width, 524288);
 
     float factor = (float)width / (float)outSize;
     float sFactor = ceilf(factor);
@@ -85,9 +81,7 @@ ZoneScoped;
         maxVal = -INFINITY;
         sId = (int)id;
         uFactor = (sId + sFactor > inSize) ? sFactor - ((sId + sFactor) - inSize) : sFactor;
-        for (int j = 0; j < uFactor; j++) {
-            if (in[sId + j] > maxVal) { maxVal = in[sId + j]; }
-        }
+        maxVal = *std::max_element(in + sId, in + sId + static_cast<int>(uFactor));
         out[i] = maxVal;
         id += factor;
     }
@@ -167,6 +161,7 @@ namespace ImGui {
 
         // Data
         if (latestFFT != NULL && fftLines != 0) {
+            ZoneScopedN("drawFFT_drawData");
             for (int i = 1; i < dataWidth; i++) {
                 double aPos = fftAreaMax.y - ((latestFFT[i - 1] - fftMin) * scaleFactor);
                 double bPos = fftAreaMax.y - ((latestFFT[i] - fftMin) * scaleFactor);
@@ -181,6 +176,7 @@ namespace ImGui {
 
         // Hold
         if (fftHold && latestFFT != NULL && latestFFTHold != NULL && fftLines != 0) {
+            ZoneScopedN("drawFFT_drawHold");
             for (int i = 1; i < dataWidth; i++) {
                 double aPos = fftAreaMax.y - ((latestFFTHold[i - 1] - fftMin) * scaleFactor);
                 double bPos = fftAreaMax.y - ((latestFFTHold[i] - fftMin) * scaleFactor);
@@ -1261,7 +1257,8 @@ namespace ImGui {
         latestFFTMtx.unlock();
     }
 
-    void drawDottedLineVert(ImGuiWindow* window, ImVec2 start, ImVec2 end, ImU32 color, float lineSegLength, float thickness) {
+    // Meh, only for vertical lines
+    void drawDottedLineVert(ImGuiWindow* window, ImVec2 start, ImVec2 end, ImU32 color, float thickness, float lineSegLength) {
         ZoneScoped;
         int lineSegCount = ceilf((end.y - start.y) / VFO_DefaultLineSegLength);
         for (int i = 0; i < lineSegCount; i++) {
@@ -1472,16 +1469,21 @@ namespace ImGui {
 
         // Edge indicators
         drawDottedLineVert(window, ImVec2(rectMin.x, rectMin.y), ImVec2(rectMin.x, rectMax.y),
-            (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+            (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT, style::uiScale);
         drawDottedLineVert(window, ImVec2(rectMax.x, rectMin.y), ImVec2(rectMax.x, rectMax.y),
-            (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+            (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT, style::uiScale);
 
         if (mouseInWf) {
             window->DrawList->AddRectFilled(wfRectMin, wfRectMax, rectCol);
             drawDottedLineVert(window, ImVec2(wfRectMin.x, wfRectMin.y), ImVec2(wfRectMin.x, wfRectMax.y),
-                (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+                (bwLoEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT, style::uiScale);
             drawDottedLineVert(window, ImVec2(wfRectMax.x, wfRectMin.y), ImVec2(wfRectMax.x, wfRectMax.y),
-                (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT);
+                (bwHiEdgeHvd ? VFO_HighlightCol : color) | 0xff << IM_COL32_A_SHIFT, style::uiScale);
+
+            drawDottedLineVert(window, ImVec2(wfRectMin.x + style::uiScale, wfRectMin.y + style::uiScale), ImVec2(wfRectMin.x + style::uiScale, wfRectMax.y),
+                (ImU32)0 | 0xff << IM_COL32_A_SHIFT, style::uiScale);
+            drawDottedLineVert(window, ImVec2(wfRectMax.x + style::uiScale, wfRectMin.y + style::uiScale), ImVec2(wfRectMax.x + style::uiScale, wfRectMax.y),
+                (ImU32)0 | 0xff << IM_COL32_A_SHIFT, style::uiScale);
         }
 
         if (lineVisible) {

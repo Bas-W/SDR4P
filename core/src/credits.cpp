@@ -102,3 +102,11 @@ namespace sdrpp_credits {
     const int hardwareDonatorCount = sizeof(hardwareDonators) / sizeof(char*);
     const int patronCount = sizeof(patrons) / sizeof(char*);
 }
+
+namespace sdr4p_credits {
+    const char* sdr4pLibraries[] = {
+        "ImPlot",
+        "Tracy Profiler"
+    };
+    const int sdr4pLibraryCount = sizeof(sdr4pLibraries) / sizeof(char*);
+}

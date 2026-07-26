@@ -51,24 +51,38 @@ void MainWindow::init() {
     gui::menu.order.clear();
     for (auto& elem : menuElements) {
         if (!elem.contains("name")) {
-            flog::error("Menu element is missing name key");
+            flog::error("Menu element is missing 'name' key");
             continue;
         }
         if (!elem["name"].is_string()) {
-            flog::error("Menu element name isn't a string");
+            flog::error("Menu element 'name' key isn't a string");
             continue;
         }
         if (!elem.contains("open")) {
-            flog::error("Menu element is missing open key");
+            flog::error("Menu element is missing 'open' key");
             continue;
         }
         if (!elem["open"].is_boolean()) {
-            flog::error("Menu element name isn't a string");
+            flog::error("Menu element 'open' key isn't a string");
             continue;
         }
+
+        if (!elem.contains("location")) {
+            flog::error("Menu element is missing 'location' key. Setting to default (left column)");
+            elem["location"] = Menu::MenuOption_Location::left;
+            goto endLocationKeyChecks;
+        }
+        if (!elem["location"].is_number_integer()) {
+            flog::error("Menu element 'location' key isn't an integer. Setting to default (left column)");
+            elem["location"] = Menu::MenuOption_Location::left;
+            goto endLocationKeyChecks;
+        }
+        endLocationKeyChecks:
+
         Menu::MenuOption_t opt;
         opt.name = elem["name"];
         opt.open = elem["open"];
+        opt.location = elem["location"];
         gui::menu.order.push_back(opt);
     }
 
@@ -188,6 +202,8 @@ void MainWindow::init() {
     double frequency = core::configManager.conf["frequency"];
 
     showMenu = core::configManager.conf["showMenu"];
+    showRightMenu = core::configManager.conf["showRightMenu"];
+
     startedWithMenuClosed = !showMenu;
 
     gui::freqSelect.setFrequency(frequency);
@@ -275,6 +291,7 @@ void MainWindow::draw() {
     // Handle VFO movement
     if (vfo != NULL) {
         if (vfo->centerOffsetChanged) {
+            ZoneScopedN("draw_vfoMoved");
             if (tuningMode == tuner::TUNER_MODE_CENTER) {
                 tuner::tune(tuner::TUNER_MODE_CENTER, gui::waterfall.selectedVFO, gui::waterfall.getCenterFrequency() + vfo->generalOffset);
             }
@@ -290,6 +307,7 @@ void MainWindow::draw() {
 
     // Handle selection of another VFO
     if (gui::waterfall.selectedVFOChanged) {
+        ZoneScopedN("draw_vfoChanged");
         gui::freqSelect.setFrequency((vfo != NULL) ? (vfo->generalOffset + gui::waterfall.getCenterFrequency()) : gui::waterfall.getCenterFrequency());
         gui::waterfall.selectedVFOChanged = false;
         gui::freqSelect.frequencyChanged = false;
@@ -297,6 +315,7 @@ void MainWindow::draw() {
 
     // Handle change in selected frequency
     if (gui::freqSelect.frequencyChanged) {
+        ZoneScopedN("draw_freqChanged");
         gui::freqSelect.frequencyChanged = false;
         tuner::tune(tuningMode, gui::waterfall.selectedVFO, gui::freqSelect.frequency);
         if (vfo != NULL) {
@@ -314,6 +333,7 @@ void MainWindow::draw() {
 
     // Handle dragging the frequency scale
     if (gui::waterfall.centerFreqMoved) {
+        ZoneScopedN("draw_centerFreqChanged");
         gui::waterfall.centerFreqMoved = false;
         sigpath::sourceManager.tune(gui::waterfall.getCenterFrequency());
         if (vfo != NULL) {
@@ -475,20 +495,22 @@ void MainWindow::draw() {
     // Process menu keybinds
     displaymenu::checkKeybinds();
 
-    // Left Column
+    // Left menu Column
     if (showMenu) {
-        ImGui::Columns(3, "WindowColumns", false);
+        ImGui::Columns(4, "WindowColumns", false);
         ImGui::SetColumnWidth(0, menuWidth);
-        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - (60.0f * style::uiScale), 100.0f * style::uiScale));
+        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - rightMenuWidth - (60.0f * style::uiScale), 100.0f * style::uiScale));
         ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
+        ImGui::SetColumnWidth(3, rightMenuWidth);
         ImGui::BeginChild("Left Column");
 
-        if (gui::menu.draw(firstMenuRender)) {
+        if (gui::menu.draw(firstMenuRender, Menu::MenuOption_Location::left)) {
             core::configManager.acquire();
             json arr = json::array();
             for (int i = 0; i < gui::menu.order.size(); i++) {
                 arr[i]["name"] = gui::menu.order[i].name;
                 arr[i]["open"] = gui::menu.order[i].open;
+                arr[i]["location"] = gui::menu.order[i].location;
             }
             core::configManager.conf["menuElements"] = arr;
 
@@ -499,12 +521,6 @@ void MainWindow::draw() {
             }
 
             core::configManager.release(true);
-        }
-        if (startedWithMenuClosed) {
-            startedWithMenuClosed = false;
-        }
-        else {
-            firstMenuRender = false;
         }
 
         if (ImGui::CollapsingHeader("Debug")) {
@@ -538,19 +554,21 @@ void MainWindow::draw() {
     }
     else {
         // When hiding the menu bar
-        ImGui::Columns(3, "WindowColumns", false);
+        ImGui::Columns(4, "WindowColumns", false);
         ImGui::SetColumnWidth(0, 8 * style::uiScale);
-        ImGui::SetColumnWidth(1, winSize.x - ((8 + 60) * style::uiScale));
+        ImGui::SetColumnWidth(1, winSize.x - (8 + 60) * style::uiScale);
         ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
+        ImGui::SetColumnWidth(3, 8 * style::uiScale);
     }
 
-    // Right Column
+    // Center Column
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     ImGui::NextColumn();
     ImGui::PopStyleVar();
 
     ImGui::BeginChild("Waterfall");
 
+    // @TODO: add bottom toolbar?
     gui::waterfall.draw();
 
     ImGui::EndChild();
@@ -584,34 +602,50 @@ void MainWindow::draw() {
         // Handle scrollwheel
         int wheel = ImGui::GetIO().MouseWheel;
         if (wheel != 0 && (gui::waterfall.mouseInFFT || gui::waterfall.mouseInWaterfall)) {
-            double nfreq;
-            if (vfo != NULL) {
-                // Select factor depending on modifier keys
-                double interval;
-                if (ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
-                    interval = vfo->snapInterval * 10.0;
-                }
-                else if (ImGui::IsKeyDown(ImGuiKey_LeftAlt)) {
-                    interval = vfo->snapInterval * 0.1;
-                }
-                else {
-                    interval = vfo->snapInterval;
-                }
+            if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl)) {
+                bw = std::clamp<double>(bw - wheel / 10.0, 0.0, 1.0);
+                double factor = bw * bw;
 
-                nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset + (interval * wheel);
-                nfreq = roundl(nfreq / interval) * interval;
+                // Map 0.0 -> 1.0 to 1000.0 -> bandwidth
+                double wfBw = gui::waterfall.getBandwidth();
+                double delta = wfBw - 1000.0;
+                double finalBw = std::min<double>(1000.0 + (factor * delta), wfBw);
+
+                gui::waterfall.setViewBandwidth(finalBw);
+                if (vfo != NULL) {
+                    gui::waterfall.setViewOffset(vfo->centerOffset); // center vfo on screen
+                }
             }
             else {
-                nfreq = gui::waterfall.getCenterFrequency() - (gui::waterfall.getViewBandwidth() * wheel / 20.0);
+                double nfreq;
+                if (vfo != NULL) {
+                    // Select factor depending on modifier keys
+                    double interval;
+                    if (ImGui::IsKeyDown(ImGuiKey_LeftShift)) {
+                        interval = vfo->snapInterval * 10.0;
+                    }
+                    else if (ImGui::IsKeyDown(ImGuiKey_LeftAlt)) {
+                        interval = vfo->snapInterval * 0.1;
+                    }
+                    else {
+                        interval = vfo->snapInterval;
+                    }
+
+                    nfreq = gui::waterfall.getCenterFrequency() + vfo->generalOffset + (interval * wheel);
+                    nfreq = roundl(nfreq / interval) * interval;
+                }
+                else {
+                    nfreq = gui::waterfall.getCenterFrequency() - (gui::waterfall.getViewBandwidth() * wheel / 20.0);
+                }
+                tuner::tune(tuningMode, gui::waterfall.selectedVFO, nfreq);
+                gui::freqSelect.setFrequency(nfreq);
+                core::configManager.acquire();
+                core::configManager.conf["frequency"] = gui::waterfall.getCenterFrequency();
+                if (vfo != NULL) {
+                    core::configManager.conf["vfoOffsets"][gui::waterfall.selectedVFO] = vfo->generalOffset;
+                }
+                core::configManager.release(true);
             }
-            tuner::tune(tuningMode, gui::waterfall.selectedVFO, nfreq);
-            gui::freqSelect.setFrequency(nfreq);
-            core::configManager.acquire();
-            core::configManager.conf["frequency"] = gui::waterfall.getCenterFrequency();
-            if (vfo != NULL) {
-                core::configManager.conf["vfoOffsets"][gui::waterfall.selectedVFO] = vfo->generalOffset;
-            }
-            core::configManager.release(true);
         }
     }
 
@@ -662,6 +696,40 @@ void MainWindow::draw() {
     }
 
     ImGui::EndChild();
+
+
+    // Right menu column
+    if (showMenu && showRightMenu) {
+        ImGui::NextColumn();
+        ImGui::BeginChild("RightMenu");
+
+        if (gui::menu.draw(firstMenuRender, Menu::MenuOption_Location::right)) {
+            core::configManager.acquire();
+            json arr = json::array();
+            for (int i = 0; i < gui::menu.order.size(); i++) {
+                arr[i]["name"] = gui::menu.order[i].name;
+                arr[i]["open"] = gui::menu.order[i].open;
+                arr[i]["location"] = gui::menu.order[i].location;
+            }
+            core::configManager.conf["menuElements"] = arr;
+
+            // Update enabled and disabled modules
+            for (auto [_name, inst] : core::moduleManager.instances) {
+                if (!core::configManager.conf["moduleInstances"].contains(_name)) { continue; }
+                core::configManager.conf["moduleInstances"][_name]["enabled"] = inst.instance->isEnabled();
+            }
+
+            core::configManager.release(true);
+        }
+
+        ImGui::EndChild();
+    }
+
+    if (startedWithMenuClosed) {
+        startedWithMenuClosed = false;
+    } else {
+        firstMenuRender = false;
+    }
 
     gui::waterfall.setFFTMin(fftMin);
     gui::waterfall.setFFTMax(fftMax);

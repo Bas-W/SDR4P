@@ -11,3 +11,8 @@ namespace sdrpp_credits {
     SDRPP_EXPORT const int hardwareDonatorCount;
     SDRPP_EXPORT const int patronCount;
 }
+
+namespace sdr4p_credits {
+    SDRPP_EXPORT const char* sdr4pLibraries[];
+    SDRPP_EXPORT const int sdr4pLibraryCount;
+}

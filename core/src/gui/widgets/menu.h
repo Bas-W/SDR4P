@@ -10,9 +10,15 @@ class Menu {
 public:
     Menu();
 
+    enum MenuOption_Location {
+        left = 0,
+        right = 1,
+    };
+
     struct MenuOption_t {
         std::string name;
         bool open;
+        MenuOption_Location location;
     };
 
     struct MenuItem_t {
@@ -23,7 +29,7 @@ public:
 
     void registerEntry(std::string name, void (*drawHandler)(void* ctx), void* ctx = NULL, ModuleManager::Instance* inst = NULL);
     void removeEntry(std::string name);
-    bool draw(bool updateStates);
+    bool draw(bool updateStates, MenuOption_Location menuLocation);
 
     std::vector<MenuOption_t> order;
 

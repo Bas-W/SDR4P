@@ -3,11 +3,13 @@
 #include <utils/flog.h>
 #include <signal_path/signal_path.h>
 #include <core.h>
+#include "Tracy.hpp"
 
 SourceManager::SourceManager() {
 }
 
 void SourceManager::registerSource(std::string name, SourceHandler* handler) {
+    ZoneScoped;
     if (sources.find(name) != sources.end()) {
         flog::error("Tried to register new source with existing name: {0}", name);
         return;
@@ -17,6 +19,7 @@ void SourceManager::registerSource(std::string name, SourceHandler* handler) {
 }
 
 void SourceManager::unregisterSource(std::string name) {
+    ZoneScoped;
     if (sources.find(name) == sources.end()) {
         flog::error("Tried to unregister non existent source: {0}", name);
         return;
@@ -34,12 +37,14 @@ void SourceManager::unregisterSource(std::string name) {
 }
 
 std::vector<std::string> SourceManager::getSourceNames() {
+    ZoneScoped;
     std::vector<std::string> names;
     for (auto const& [name, src] : sources) { names.push_back(name); }
     return names;
 }
 
 void SourceManager::selectSource(std::string name) {
+    ZoneScoped;
     if (sources.find(name) == sources.end()) {
         flog::error("Tried to select non existent source: {0}", name);
         return;
@@ -60,6 +65,7 @@ void SourceManager::selectSource(std::string name) {
 }
 
 void SourceManager::showSelectedMenu() {
+    ZoneScoped;
     if (selectedHandler == NULL) {
         return;
     }
@@ -67,6 +73,7 @@ void SourceManager::showSelectedMenu() {
 }
 
 void SourceManager::start() {
+    ZoneScoped;
     if (selectedHandler == NULL) {
         return;
     }
@@ -74,6 +81,7 @@ void SourceManager::start() {
 }
 
 void SourceManager::stop() {
+    ZoneScoped;
     if (selectedHandler == NULL) {
         return;
     }
@@ -81,6 +89,7 @@ void SourceManager::stop() {
 }
 
 void SourceManager::tune(double freq) {
+    ZoneScoped;
     if (selectedHandler == NULL) {
         return;
     }
@@ -91,16 +100,19 @@ void SourceManager::tune(double freq) {
 }
 
 void SourceManager::setTuningOffset(double offset) {
+    ZoneScoped;
     tuneOffset = offset;
     tune(currentFreq);
 }
 
 void SourceManager::setTuningMode(TuningMode mode) {
+    ZoneScoped;
     tuneMode = mode;
     tune(currentFreq);
 }
 
 void SourceManager::setPanadapterIF(double freq) {
+    ZoneScoped;
     ifFreq = freq;
     tune(currentFreq);
 }

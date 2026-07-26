@@ -53,10 +53,12 @@ private:
     std::string audioStreamName = "";
     std::string sourceName = "";
     int menuWidth = 300;
+    int rightMenuWidth = 300;
     bool grabbingMenu = false;
     int newWidth = 300;
     int fftHeight = 300;
     bool showMenu = true;
+    bool showRightMenu = false;
     int tuningMode = tuner::TUNER_MODE_NORMAL;
     dsp::stream<dsp::complex_t> dummyStream;
     bool demoWindow = false;
