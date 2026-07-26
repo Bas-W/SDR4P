@@ -9,8 +9,8 @@ android {
         applicationId "org.sdr4p.sdr4p"
         minSdkVersion 28
         targetSdkVersion 28
-        versionCode 2626010
-        versionName "w26y26v0.1.0"
+        versionCode 2630011
+        versionName "y26w30v0.1.1"
 
         externalNativeBuild {
             cmake {

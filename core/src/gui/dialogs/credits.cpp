@@ -48,8 +48,8 @@ namespace credits {
         }
         ImGui::Spacing();
         ImGui::TextUnformatted("Added by sdr4p fork");
-        for (int i = 0; i < sdr4p_credits::libraryCount; i++) {
-            ImGui::BulletText("%s", sdr4p_credits::libraries[i]);
+        for (int i = 0; i < sdr4p_credits::sdr4pLibraryCount; i++) {
+            ImGui::BulletText("%s", sdr4p_credits::sdr4pLibraries[i]);
         }
 
         ImGui::NextColumn();
@@ -69,7 +69,7 @@ namespace credits {
         ImGui::Spacing();
         ImGui::Spacing();
         ImGui::Spacing();
-        ImGui::TextUnformatted("SDR4P v" VERSION_SDR4_STR ", based on SDR++ v" VERSION_STR " (Built at " __TIME__ ", " __DATE__ ")");
+        ImGui::TextUnformatted("SDR4P v" VERSION_SDR4P_STR ", based on SDR++ v" VERSION_STR " (Built at " __TIME__ ", " __DATE__ ")");
 
         ImGui::EndPopup();
         ImGui::PopStyleColor();

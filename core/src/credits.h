@@ -13,6 +13,6 @@ namespace sdrpp_credits {
 }
 
 namespace sdr4p_credits {
-    SDRPP_EXPORT const char* libraries[];
-    SDRPP_EXPORT const int libraryCount;
+    SDRPP_EXPORT const char* sdr4pLibraries[];
+    SDRPP_EXPORT const int sdr4pLibraryCount;
 }

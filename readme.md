@@ -24,8 +24,38 @@
 * Modular design (easily write your own plugins)
 
 
-## Manual
-See the [manual](./wiki/manual.md) for information regarding controls and usage of this software. 
+## User Manual
+See the [manual](./wiki/manual.md) for information regarding controls and usage of this software.
+
+## Installation
+### Pre-built
+Pre-built binaries for various platforms are available via the [releases page](https://github.com/Bas-W/SDR4P/releases).
+
+#### Windows
+Download the latest release from the [releases page](https://github.com/Bas-W/SDR4P/releases)
+and extract to the directory of your choice.
+
+#### Linux
+##### Debian-based (Ubuntu, Mint, etc)
+Download the latest release from the [releases page](https://github.com/Bas-W/SDR4P/releases)
+and extract to the directory of your choice.
+
+Then, use apt to install it:
+
+```sh
+sudo apt install path/to/sdr4p_debian_amd64.deb
+```
+
+**IMPORTANT: You must install the drivers for your SDR module.
+Follow instructions from your manufacturer as to how to do this on your particular distro.**
+
+#### Android
+Download the latest release from the [releases page](https://github.com/Bas-W/SDR4P/releases)
+and install the .apk file.  
+Depending on your android version, you may have to allow apps to be installed from external sources.
+
+### From source
+See the build instructions at https://github.com/AlexandreRouma/SDRPlusPlus
 
 ## Goal
 This fork serves as a place to keep my modifications to SDR++, mostly UI/UX related.

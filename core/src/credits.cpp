@@ -104,9 +104,9 @@ namespace sdrpp_credits {
 }
 
 namespace sdr4p_credits {
-    const char* libraries[] = {
+    const char* sdr4pLibraries[] = {
         "ImPlot",
         "Tracy Profiler"
     };
-    const int libraryCount = sizeof(libraries) / sizeof(char*);
+    const int sdr4pLibraryCount = sizeof(sdr4pLibraries) / sizeof(char*);
 }

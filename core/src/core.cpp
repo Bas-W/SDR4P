@@ -62,7 +62,7 @@ namespace core {
 
 // main
 int sdrpp_main(int argc, char* argv[]) {
-    flog::info("SDR4P v" VERSION_SDR4_STR ", based on SDR++ v" VERSION_STR " (Built at " __TIME__ ", " __DATE__ ")");
+    flog::info("SDR4P v" VERSION_SDR4P_STR ", based on SDR++ v" VERSION_STR " (Built at " __TIME__ ", " __DATE__ ")");
 
 #ifdef IS_MACOS_BUNDLE
     // If this is a MacOS .app, CD to the correct directory
