@@ -17,6 +17,7 @@ namespace icons {
     ImTextureID UNMUTED;
     ImTextureID NORMAL_TUNING;
     ImTextureID CENTER_TUNING;
+    ImTextureID EXPLORE;
 
     GLuint loadTexture(std::string path) {
         int w, h, n;
@@ -47,6 +48,7 @@ namespace icons {
         UNMUTED = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/unmuted.png");
         NORMAL_TUNING = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/normal_tuning.png");
         CENTER_TUNING = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/center_tuning.png");
+        EXPLORE = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/explore.png");
 
         return true;
     }

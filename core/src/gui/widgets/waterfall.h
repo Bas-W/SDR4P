@@ -173,6 +173,7 @@ namespace ImGui {
         bool centerFreqMoved = false;
         bool vfoFreqChanged = false;
         bool bandplanEnabled = false;
+        int bandPlanPos = BANDPLAN_POS_BOTTOM;
         bandplan::BandPlan_t* bandplan = NULL;
 
         bool mouseInFFTResize = false;
@@ -323,8 +324,6 @@ namespace ImGui {
         bool bandplanVisible = false;
 
         bool _fullUpdate = true;
-
-        int bandPlanPos = BANDPLAN_POS_BOTTOM;
 
         bool fftHold = false;
         float fftHoldSpeed = 0.3f;

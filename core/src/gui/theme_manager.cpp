@@ -125,12 +125,15 @@ bool ThemeManager::applyTheme(std::string name) {
 
     auto& style = ImGui::GetStyle();
 
-    style.WindowRounding = 0.0f;
-    style.ChildRounding = 0.0f;
-    style.FrameRounding = 0.0f;
-    style.GrabRounding = 0.0f;
-    style.PopupRounding = 0.0f;
-    style.ScrollbarRounding = 0.0f;
+    style.WindowRounding = 5.0f;
+    style.ChildRounding = 5.0f;
+    style.FrameRounding = 3.0f;
+    style.GrabRounding = 1.5f;
+    style.PopupRounding = 5.0f;
+    style.ScrollbarRounding = 3.0f;
+#ifdef __ANDROID__
+    style.ScrollbarSize = 20.0f;
+#endif
 
     ImVec4* colors = style.Colors;
     Theme thm = themes[name];

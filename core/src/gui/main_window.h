@@ -1,5 +1,4 @@
 #pragma once
-#include <imgui/imgui.h>
 #include <fftw3.h>
 #include <dsp/types.h>
 #include <dsp/stream.h>
@@ -27,6 +26,8 @@ public:
 
     void setPlayState(bool _playing);
     bool isPlaying();
+
+    int getTuningMode();
 
     bool lockWaterfallControls = false;
     bool playButtonLocked = false;

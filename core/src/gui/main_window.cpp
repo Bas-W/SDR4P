@@ -459,8 +459,21 @@ void MainWindow::draw() {
         showCredits = false;
     }
 
-    // Reset waterfall lock
-    lockWaterfallControls = showCredits;
+    // Handle waterfall lock (may still be locked later)
+    if (showCredits) {
+        goto waterfallLocked;
+    }
+    if (bandplanmenu::isExplorerOpen() && bandplanmenu::isExplorerHovered()) {
+        goto waterfallLocked;
+    }
+    if (bandplanmenu::wasExplorerOpen() && bandplanmenu::wasExplorerHovered()) {
+        goto waterfallLocked;
+    }
+    lockWaterfallControls = false;
+    goto waterfallUnlocked;
+    waterfallLocked:
+    lockWaterfallControls = true;
+    waterfallUnlocked:
 
     // Handle menu resize
     ImVec2 winSize = ImGui::GetWindowSize();
@@ -499,7 +512,7 @@ void MainWindow::draw() {
     if (showMenu) {
         ImGui::Columns(4, "WindowColumns", false);
         ImGui::SetColumnWidth(0, menuWidth);
-        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - rightMenuWidth - (60.0f * style::uiScale), 100.0f * style::uiScale));
+        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - (showRightMenu ? rightMenuWidth : 0.0f) - (60.0f * style::uiScale), 100.0f * style::uiScale));
         ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
         ImGui::SetColumnWidth(3, rightMenuWidth);
         ImGui::BeginChild("Left Column");
@@ -652,6 +665,18 @@ void MainWindow::draw() {
     ImGui::NextColumn();
     ImGui::BeginChild("WaterfallControls");
 
+    ImGui::PushID(ImGui::GetID("sdrpp_bandplanExpl_btn"));
+    if (ImGui::ImageButton(icons::EXPLORE, ImVec2(30 * style::uiScale, 30 * style::uiScale), ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol)) {
+        bandplanmenu::openExplorer();
+    }
+    ImGui::PopID();
+
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("Bandplan Explorer");
+    }
+
+    ImGui::NewLine();
+
     ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - (ImGui::CalcTextSize("Zoom").x / 2.0));
     ImGui::TextUnformatted("Zoom");
     ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - 10 * style::uiScale);
@@ -736,6 +761,8 @@ void MainWindow::draw() {
     gui::waterfall.setWaterfallMin(fftMin);
     gui::waterfall.setWaterfallMax(fftMax);
 
+    bandplanmenu::drawExplorer();
+
     ImGui::End();
 
     if (showCredits) {
@@ -778,6 +805,10 @@ bool MainWindow::sdrIsRunning() {
 bool MainWindow::isPlaying() {
     ZoneScoped;
     return playing;
+}
+int MainWindow::getTuningMode() {
+    ZoneScoped;
+    return tuningMode;
 }
 
 void MainWindow::setFirstMenuRender() {
