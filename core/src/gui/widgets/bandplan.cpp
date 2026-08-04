@@ -78,7 +78,7 @@ namespace bandplan {
         b = std::stoi(col.substr(5, 2), NULL, 16);
         a = std::stoi(col.substr(7, 2), NULL, 16);
         ct.colorValue = IM_COL32(r, g, b, a);
-        ct.transColorValue = IM_COL32(r, g, b, 100);
+        ct.transColorValue = IM_COL32(r, g, b, 65);
     }
 
     void loadBandPlan(std::string path) {

@@ -1,5 +1,4 @@
 #pragma once
-#include <imgui/imgui.h>
 #include <fftw3.h>
 #include <dsp/types.h>
 #include <dsp/stream.h>
@@ -10,6 +9,12 @@
 #include <gui/tuner.h>
 
 #define WINDOW_FLAGS ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBackground
+
+#ifdef __ANDROID__
+const int mainWindow_defaultMenuWidth = 600;
+#else
+const int mainWindow_defaultMenuWidth = 300;
+#endif
 
 class MainWindow {
 public:
@@ -27,6 +32,8 @@ public:
 
     void setPlayState(bool _playing);
     bool isPlaying();
+
+    int getTuningMode();
 
     bool lockWaterfallControls = false;
     bool playButtonLocked = false;
@@ -52,10 +59,14 @@ private:
     bool showCredits = false;
     std::string audioStreamName = "";
     std::string sourceName = "";
-    int menuWidth = 300;
-    int rightMenuWidth = 300;
+    int menuWidth = mainWindow_defaultMenuWidth;
+    int menuWidthRight = mainWindow_defaultMenuWidth;
     bool grabbingMenu = false;
+    bool grabbingMenuRight = false;
+    bool hoveringMenu = false;
+    bool hoveringMenuRight = false;
     int newWidth = 300;
+    int newWidthRight = 300;
     int fftHeight = 300;
     bool showMenu = true;
     bool showRightMenu = false;

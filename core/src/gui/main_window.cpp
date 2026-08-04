@@ -29,6 +29,11 @@
 #include <gui/tuner.h>
 #include "Tracy.hpp"
 
+const int narrowMenuWidth = 70.0f * style::uiScale;
+const int buttonWidth_normal = 35.0f * style::uiScale;
+const int buttonPadding_normal = 2.0f;
+const int edgeDragMargin = 6.0f * style::uiScale;
+
 void MainWindow::init() {
     ZoneScoped;
     LoadingScreen::show("Initializing UI");
@@ -215,8 +220,10 @@ void MainWindow::init() {
     gui::waterfall.centerFreqMoved = false;
     gui::waterfall.selectFirstVFO();
 
-    menuWidth = core::configManager.conf["menuWidth"];
+    menuWidth = core::configManager.conf["menuWidth"].is_number() ? static_cast<int>(core::configManager.conf["menuWidth"]) : menuWidth;
     newWidth = menuWidth;
+    menuWidthRight = core::configManager.conf["menuWidthRight"].is_number() ? static_cast<int>(core::configManager.conf["menuWidthRight"]) : menuWidthRight;
+    newWidthRight = menuWidthRight;
 
     fftHeight = core::configManager.conf["fftHeight"];
     gui::waterfall.setFFTHeight(fftHeight);
@@ -355,32 +362,20 @@ void MainWindow::draw() {
         core::configManager.release(true);
     }
 
-    // To Bar
-    // ImGui::BeginChild("TopBarChild", ImVec2(0, 49.0f * style::uiScale), false, ImGuiWindowFlags_HorizontalScrollbar);
-    ImVec2 btnSize(30 * style::uiScale, 30 * style::uiScale);
-    ImGui::PushID(ImGui::GetID("sdrpp_menu_btn"));
-    if (ImGui::ImageButton(icons::MENU, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_Menu, false)) {
-        showMenu = !showMenu;
-        core::configManager.acquire();
-        core::configManager.conf["showMenu"] = showMenu;
-        core::configManager.release(true);
-    }
-    ImGui::PopID();
-
-    ImGui::SameLine();
+    ImVec2 btnSize(buttonWidth_normal - buttonPadding_normal * 2, buttonWidth_normal - buttonPadding_normal * 2);
 
     bool tmpPlaySate = playing;
     if (playButtonLocked && !tmpPlaySate) { style::beginDisabled(); }
     if (playing) {
         ImGui::PushID(ImGui::GetID("sdrpp_stop_btn"));
-        if (ImGui::ImageButton(icons::STOP, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_End, false)) {
+        if (ImGui::ImageButton(icons::STOP, btnSize, ImVec2(0, 0), ImVec2(1, 1), buttonPadding_normal, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_End, false)) {
             setPlayState(false);
         }
         ImGui::PopID();
     }
     else { // TODO: Might need to check if there even is a device
         ImGui::PushID(ImGui::GetID("sdrpp_play_btn"));
-        if (ImGui::ImageButton(icons::PLAY, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_End, false)) {
+        if (ImGui::ImageButton(icons::PLAY, btnSize, ImVec2(0, 0), ImVec2(1, 1), buttonPadding_normal, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_End, false)) {
             setPlayState(true);
         }
         ImGui::PopID();
@@ -396,7 +391,7 @@ void MainWindow::draw() {
     ImGui::SameLine();
     float origY = ImGui::GetCursorPosY();
 
-    sigpath::sinkManager.showVolumeSlider(gui::waterfall.selectedVFO, "##_sdrpp_main_volume_", 248 * style::uiScale, btnSize.x, 5, true);
+    sigpath::sinkManager.showVolumeSlider(gui::waterfall.selectedVFO, "##_sdrpp_main_volume_", 200 * style::uiScale, buttonWidth_normal - buttonPadding_normal * 2, buttonPadding_normal, true);
 
     ImGui::SameLine();
 
@@ -408,7 +403,7 @@ void MainWindow::draw() {
     ImGui::SetCursorPosY(origY);
     if (tuningMode == tuner::TUNER_MODE_CENTER) {
         ImGui::PushID(ImGui::GetID("sdrpp_ena_st_btn"));
-        if (ImGui::ImageButton(icons::CENTER_TUNING, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol)) {
+        if (ImGui::ImageButton(icons::CENTER_TUNING, btnSize, ImVec2(0, 0), ImVec2(1, 1), buttonPadding_normal, ImVec4(0, 0, 0, 0), textCol)) {
             tuningMode = tuner::TUNER_MODE_NORMAL;
             gui::waterfall.VFOMoveSingleClick = false;
             core::configManager.acquire();
@@ -419,7 +414,7 @@ void MainWindow::draw() {
     }
     else { // TODO: Might need to check if there even is a device
         ImGui::PushID(ImGui::GetID("sdrpp_dis_st_btn"));
-        if (ImGui::ImageButton(icons::NORMAL_TUNING, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol)) {
+        if (ImGui::ImageButton(icons::NORMAL_TUNING, btnSize, ImVec2(0, 0), ImVec2(1, 1), buttonPadding_normal, ImVec4(0, 0, 0, 0), textCol)) {
             tuningMode = tuner::TUNER_MODE_CENTER;
             gui::waterfall.VFOMoveSingleClick = true;
             tuner::tune(tuner::TUNER_MODE_CENTER, gui::waterfall.selectedVFO, gui::freqSelect.frequency);
@@ -449,7 +444,7 @@ void MainWindow::draw() {
     // Logo button
     ImGui::SetCursorPosX(ImGui::GetWindowSize().x - (48 * style::uiScale));
     ImGui::SetCursorPosY(10.0f * style::uiScale);
-    if (ImGui::ImageButton(icons::LOGO, ImVec2(32 * style::uiScale, 32 * style::uiScale), ImVec2(0, 0), ImVec2(1, 1), 0)) {
+    if (ImGui::ImageButton(icons::LOGO, ImVec2(buttonWidth_normal, buttonWidth_normal), ImVec2(0, 0), ImVec2(1, 1), 0)) {
         showCredits = true;
     }
     if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
@@ -459,29 +454,42 @@ void MainWindow::draw() {
         showCredits = false;
     }
 
-    // Reset waterfall lock
-    lockWaterfallControls = showCredits;
+    // Handle waterfall lock (may still be locked later)
+    if (showCredits) {
+        goto waterfallLocked;
+    }
+    if (bandplanmenu::isExplorerOpen() && bandplanmenu::isExplorerHovered()) {
+        goto waterfallLocked;
+    }
+    if (bandplanmenu::wasExplorerOpen() && bandplanmenu::wasExplorerHovered()) {
+        goto waterfallLocked;
+    }
+    lockWaterfallControls = false;
+    goto waterfallUnlocked;
+    waterfallLocked:
+    lockWaterfallControls = true;
+    waterfallUnlocked:
 
     // Handle menu resize
-    ImVec2 winSize = ImGui::GetWindowSize();
     ImVec2 mousePos = ImGui::GetMousePos();
+    ImGuiStyle& style = ImGui::GetStyle();
     if (!lockWaterfallControls && showMenu) {
         float curY = ImGui::GetCursorPosY();
         bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
         bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
         if (grabbingMenu) {
-            newWidth = mousePos.x;
-            newWidth = std::clamp<float>(newWidth, 250, winSize.x - 250);
-            ImGui::GetForegroundDrawList()->AddLine(ImVec2(newWidth, curY), ImVec2(newWidth, winSize.y - 10), ImGui::GetColorU32(ImGuiCol_SeparatorActive));
+            newWidth = mousePos.x - style.CellPadding.x * 2;
+            newWidth = std::clamp<float>(newWidth, 250, ImGui::GetWindowContentRegionMax().x - 250);
+            ImGui::GetForegroundDrawList()->AddLine(ImVec2(newWidth + style.CellPadding.x * 2, curY), ImVec2(newWidth + style.CellPadding.x * 2, ImGui::GetWindowContentRegionMax().y), ImGui::GetColorU32(ImGuiCol_SeparatorActive));
         }
-        if (mousePos.x >= newWidth - (2.0f * style::uiScale) && mousePos.x <= newWidth + (2.0f * style::uiScale) && mousePos.y > curY) {
-            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+        if (mousePos.x >= newWidth + style.CellPadding.x * 2 - edgeDragMargin && mousePos.x <= newWidth + style.CellPadding.x * 2 + edgeDragMargin && mousePos.y > curY) {
+            hoveringMenu = true;
             if (click) {
                 grabbingMenu = true;
             }
         }
         else {
-            ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
+            hoveringMenu = false;
         }
         if (!down && grabbingMenu) {
             grabbingMenu = false;
@@ -491,80 +499,140 @@ void MainWindow::draw() {
             core::configManager.release(true);
         }
     }
+    if (!lockWaterfallControls && showRightMenu) {
+        float curY = ImGui::GetCursorPosY();
+        bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
+        bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
+        if (grabbingMenuRight) {
+            newWidthRight = ImGui::GetWindowContentRegionMax().x - mousePos.x - narrowMenuWidth - style.CellPadding.x * 2;
+            newWidthRight = std::clamp<float>(newWidthRight, 250, ImGui::GetWindowContentRegionMax().x - 250);
+            ImGui::GetForegroundDrawList()->AddLine(ImVec2(ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - style.CellPadding.x * 2, curY),
+                ImVec2(ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - style.CellPadding.x * 2, ImGui::GetWindowContentRegionMax().y), ImGui::GetColorU32(ImGuiCol_SeparatorActive));
+        }
+        if (mousePos.x >= ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - style.CellPadding.x * 2 - edgeDragMargin && mousePos.x <= ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - style.CellPadding.x * 2 + edgeDragMargin && mousePos.y > curY) {
+            hoveringMenuRight = true;
+            if (click) {
+                grabbingMenuRight = true;
+            }
+        }
+        else {
+            hoveringMenuRight = false;
+        }
+        if (!down && grabbingMenuRight) {
+            grabbingMenuRight = false;
+            menuWidthRight = newWidthRight;
+            core::configManager.acquire();
+            core::configManager.conf["menuWidthRight"] = menuWidthRight;
+            core::configManager.release(true);
+        }
+    }
+
+    if (hoveringMenu || hoveringMenuRight) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+    } else {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Arrow);
+    }
 
     // Process menu keybinds
     displaymenu::checkKeybinds();
 
+    // Columns scaling
+    float leftPanelWidth = showMenu ? menuWidth : (buttonWidth_normal + buttonPadding_normal * 2) * 1.2f;
+    float rightPanelWidth = showRightMenu ? menuWidthRight : (buttonWidth_normal + buttonPadding_normal * 2) * 1.2f;
+    float centerPanelWidth = std::max<int>(ImGui::GetWindowContentRegionMax().x - leftPanelWidth - rightPanelWidth - narrowMenuWidth, 100.0f * style::uiScale);
+
+    ImGui::Columns(4, "WindowColumns", false);
+    ImGui::SetColumnWidth(0, leftPanelWidth);
+    ImGui::SetColumnWidth(1, centerPanelWidth);
+    ImGui::SetColumnWidth(2, narrowMenuWidth);
+    ImGui::SetColumnWidth(3, rightPanelWidth);
+
     // Left menu Column
-    if (showMenu) {
-        ImGui::Columns(4, "WindowColumns", false);
-        ImGui::SetColumnWidth(0, menuWidth);
-        ImGui::SetColumnWidth(1, std::max<int>(winSize.x - menuWidth - rightMenuWidth - (60.0f * style::uiScale), 100.0f * style::uiScale));
-        ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
-        ImGui::SetColumnWidth(3, rightMenuWidth);
-        ImGui::BeginChild("Left Column");
-
-        if (gui::menu.draw(firstMenuRender, Menu::MenuOption_Location::left)) {
+    {
+        ImGui::PushID(ImGui::GetID("sdrpp_leftMenuToggle_btn"));
+        int buttonPadding = buttonPadding_normal;
+        float buttonWidth = buttonWidth_normal - buttonPadding * 2;
+        if (showMenu) {
+            ImGui::SetCursorPosX(ImGui::GetContentRegionAvail().x - buttonWidth + ImGui::GetStyle().CellPadding.x);
+        }
+        if (ImGui::ImageButton(showMenu ? icons::LEFT_PANEL_CLOSE : icons::LEFT_PANEL_OPEN, ImVec2(buttonWidth, buttonWidth), ImVec2(0, 0), ImVec2(1, 1), buttonPadding, ImVec4(0, 0, 0, 0), textCol)) {
+            showMenu = !showMenu;
             core::configManager.acquire();
-            json arr = json::array();
-            for (int i = 0; i < gui::menu.order.size(); i++) {
-                arr[i]["name"] = gui::menu.order[i].name;
-                arr[i]["open"] = gui::menu.order[i].open;
-                arr[i]["location"] = gui::menu.order[i].location;
-            }
-            core::configManager.conf["menuElements"] = arr;
-
-            // Update enabled and disabled modules
-            for (auto [_name, inst] : core::moduleManager.instances) {
-                if (!core::configManager.conf["moduleInstances"].contains(_name)) { continue; }
-                core::configManager.conf["moduleInstances"][_name]["enabled"] = inst.instance->isEnabled();
-            }
-
+            core::configManager.conf["showMenu"] = showMenu;
             core::configManager.release(true);
         }
+        ImGui::PopID();
 
-        if (ImGui::CollapsingHeader("Debug")) {
-            ImGui::Text("Frame time: %.3f ms/frame", ImGui::GetIO().DeltaTime * 1000.0f);
-            ImGui::Text("Framerate: %.1f FPS", ImGui::GetIO().Framerate);
-            ImGui::Text("Center Frequency: %.0f Hz", gui::waterfall.getCenterFrequency());
-            ImGui::Text("Source name: %s", sourceName.c_str());
-            ImGui::Checkbox("Show demo window", &demoWindow);
-            ImGui::Text("ImGui version: %s", ImGui::GetVersion());
-
-            // ImGui::Checkbox("Bypass buffering", &sigpath::iqFrontEnd.inputBuffer.bypass);
-
-            // ImGui::Text("Buffering: %d", (sigpath::iqFrontEnd.inputBuffer.writeCur - sigpath::iqFrontEnd.inputBuffer.readCur + 32) % 32);
-
-            if (ImGui::Button("Test Bug")) {
-                flog::error("Will this make the software crash?");
-            }
-
-            if (ImGui::Button("Testing something")) {
-                gui::menu.order[0].open = true;
-                firstMenuRender = true;
-            }
-
-            ImGui::Checkbox("WF Single Click", &gui::waterfall.VFOMoveSingleClick);
-            ImGui::Checkbox("Lock Menu Order", &gui::menu.locked);
-
-            ImGui::Spacing();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("%s Side Panel", showMenu ? "Close" : "Open");
         }
+    }
 
-        ImGui::EndChild();
+    if (ImGui::BeginChild("Left Column", ImVec2(0, 0), showMenu, ImGuiWindowFlags_None)) {
+        if (showMenu) {
+            if (gui::menu.draw(firstMenuRender, Menu::MenuOption_Location::left)) {
+                core::configManager.acquire();
+                json arr = json::array();
+                for (int i = 0; i < gui::menu.order.size(); i++) {
+                    arr[i]["name"] = gui::menu.order[i].name;
+                    arr[i]["open"] = gui::menu.order[i].open;
+                    arr[i]["location"] = gui::menu.order[i].location;
+                }
+                core::configManager.conf["menuElements"] = arr;
+
+                // Update enabled and disabled modules
+                for (auto [_name, inst] : core::moduleManager.instances) {
+                    if (!core::configManager.conf["moduleInstances"].contains(_name)) { continue; }
+                    core::configManager.conf["moduleInstances"][_name]["enabled"] = inst.instance->isEnabled();
+                }
+
+                core::configManager.release(true);
+            }
+
+            if (ImGui::CollapsingHeader("Debug")) {
+                ImGui::Text("Frame time: %.3f ms/frame", ImGui::GetIO().DeltaTime * 1000.0f);
+                ImGui::Text("Framerate: %.1f FPS", ImGui::GetIO().Framerate);
+                ImGui::Text("Center Frequency: %.0f Hz", gui::waterfall.getCenterFrequency());
+                ImGui::Text("Source name: %s", sourceName.c_str());
+                ImGui::Checkbox("Show demo window", &demoWindow);
+                ImGui::Text("ImGui version: %s", ImGui::GetVersion());
+
+                // ImGui::Checkbox("Bypass buffering", &sigpath::iqFrontEnd.inputBuffer.bypass);
+
+                // ImGui::Text("Buffering: %d", (sigpath::iqFrontEnd.inputBuffer.writeCur - sigpath::iqFrontEnd.inputBuffer.readCur + 32) % 32);
+
+                if (ImGui::Button("Test Bug")) {
+                    flog::error("Will this make the software crash?");
+                }
+
+                if (ImGui::Button("Testing something")) {
+                    gui::menu.order[0].open = true;
+                    firstMenuRender = true;
+                }
+
+                ImGui::Checkbox("WF Single Click", &gui::waterfall.VFOMoveSingleClick);
+                ImGui::Checkbox("Lock Menu Order", &gui::menu.locked);
+
+                if (ImGui::Button("Reset side panel sizes")) {
+                    menuWidth = mainWindow_defaultMenuWidth;
+                    menuWidthRight = mainWindow_defaultMenuWidth;
+                    newWidth = menuWidth;
+                    newWidthRight = menuWidthRight;
+                    core::configManager.acquire();
+                    core::configManager.conf["menuWidth"] = menuWidth;
+                    core::configManager.conf["menuWidthRight"] = menuWidthRight;
+                    core::configManager.release(true);
+                }
+
+                ImGui::Spacing();
+            }
+        }
     }
-    else {
-        // When hiding the menu bar
-        ImGui::Columns(4, "WindowColumns", false);
-        ImGui::SetColumnWidth(0, 8 * style::uiScale);
-        ImGui::SetColumnWidth(1, winSize.x - (8 + 60) * style::uiScale);
-        ImGui::SetColumnWidth(2, 60.0f * style::uiScale);
-        ImGui::SetColumnWidth(3, 8 * style::uiScale);
-    }
+
+    ImGui::EndChild();
 
     // Center Column
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     ImGui::NextColumn();
-    ImGui::PopStyleVar();
 
     ImGui::BeginChild("Waterfall");
 
@@ -649,85 +717,128 @@ void MainWindow::draw() {
         }
     }
 
+    // Waterfall controls
     ImGui::NextColumn();
-    ImGui::BeginChild("WaterfallControls");
+    if (ImGui::BeginChild("WaterfallControls", ImVec2(0, 0), true, ImGuiWindowFlags_NoScrollbar)) {
+        ImVec2 windowSize = ImGui::GetWindowSize();
 
-    ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - (ImGui::CalcTextSize("Zoom").x / 2.0));
-    ImGui::TextUnformatted("Zoom");
-    ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - 10 * style::uiScale);
-    ImVec2 wfSliderSize(20.0 * style::uiScale, 150.0 * style::uiScale);
-    if (ImGui::VSliderFloat("##_7_", wfSliderSize, &bw, 1.0, 0.0, "")) {
-        double factor = (double)bw * (double)bw;
-
-        // Map 0.0 -> 1.0 to 1000.0 -> bandwidth
-        double wfBw = gui::waterfall.getBandwidth();
-        double delta = wfBw - 1000.0;
-        double finalBw = std::min<double>(1000.0 + (factor * delta), wfBw);
-
-        gui::waterfall.setViewBandwidth(finalBw);
-        if (vfo != NULL) {
-            gui::waterfall.setViewOffset(vfo->centerOffset); // center vfo on screen
+        ImGui::PushID(ImGui::GetID("sdrpp_bandplanExpl_btn"));
+        int buttonPadding = buttonPadding_normal;
+        float buttonWidth = buttonWidth_normal - buttonPadding * 2;
+        ImGui::SetCursorPosX(windowSize.x / 2.0f - buttonWidth / 2.0f - buttonPadding);
+        if (ImGui::ImageButton(icons::EXPLORE, ImVec2(buttonWidth, buttonWidth), ImVec2(0, 0), ImVec2(1, 1), buttonPadding, ImVec4(0, 0, 0, 0), textCol)) {
+            bandplanmenu::openExplorer();
         }
-    }
+        ImGui::PopID();
 
-    ImGui::NewLine();
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Bandplan Explorer");
+        }
 
-    ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - (ImGui::CalcTextSize("Max").x / 2.0));
-    ImGui::TextUnformatted("Max");
-    ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - 10 * style::uiScale);
-    if (ImGui::VSliderFloat("##_8_", wfSliderSize, &fftMax, 0.0, -160.0f, "")) {
-        fftMax = std::max<float>(fftMax, fftMin + 10);
-        core::configManager.acquire();
-        core::configManager.conf["max"] = fftMax;
-        core::configManager.release(true);
-    }
+        ImGui::NewLine();
 
-    ImGui::NewLine();
+        ImGuiStyle& style = ImGui::GetStyle();
 
-    ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - (ImGui::CalcTextSize("Min").x / 2.0));
-    ImGui::TextUnformatted("Min");
-    ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - 10 * style::uiScale);
-    ImGui::SetItemUsingMouseWheel();
-    if (ImGui::VSliderFloat("##_9_", wfSliderSize, &fftMin, 0.0, -160.0f, "")) {
-        fftMin = std::min<float>(fftMax - 10, fftMin);
-        core::configManager.acquire();
-        core::configManager.conf["min"] = fftMin;
-        core::configManager.release(true);
-    }
+        // Shrink sliders to fit
+        float sliderHeight = std::clamp((ImGui::GetContentRegionAvail().y - style.WindowPadding.y - ImGui::GetTextLineHeight() * 6 - style.ItemSpacing.y * 2) / 3, 20.0f * style::uiScale, 150.0f * style::uiScale);
+        ImVec2 wfSliderSize(20.0 * style::uiScale, sliderHeight);
 
-    ImGui::EndChild();
+        ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - (ImGui::CalcTextSize("Zoom").x / 2.0));
+        ImGui::TextUnformatted("Zoom");
+        ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - 10 * style::uiScale);
 
+        if (ImGui::VSliderFloat("##_7_", wfSliderSize, &bw, 1.0, 0.0, "")) {
+            double factor = (double)bw * (double)bw;
 
-    // Right menu column
-    if (showMenu && showRightMenu) {
-        ImGui::NextColumn();
-        ImGui::BeginChild("RightMenu");
+            // Map 0.0 -> 1.0 to 1000.0 -> bandwidth
+            double wfBw = gui::waterfall.getBandwidth();
+            double delta = wfBw - 1000.0;
+            double finalBw = std::min<double>(1000.0 + (factor * delta), wfBw);
 
-        if (gui::menu.draw(firstMenuRender, Menu::MenuOption_Location::right)) {
+            gui::waterfall.setViewBandwidth(finalBw);
+            if (vfo != NULL) {
+                gui::waterfall.setViewOffset(vfo->centerOffset); // center vfo on screen
+            }
+        }
+
+        ImGui::NewLine();
+
+        ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - (ImGui::CalcTextSize("Max").x / 2.0));
+        ImGui::TextUnformatted("Max");
+        ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - 10 * style::uiScale);
+        if (ImGui::VSliderFloat("##_8_", wfSliderSize, &fftMax, 0.0, -160.0f, "")) {
+            fftMax = std::max<float>(fftMax, fftMin + 10);
             core::configManager.acquire();
-            json arr = json::array();
-            for (int i = 0; i < gui::menu.order.size(); i++) {
-                arr[i]["name"] = gui::menu.order[i].name;
-                arr[i]["open"] = gui::menu.order[i].open;
-                arr[i]["location"] = gui::menu.order[i].location;
-            }
-            core::configManager.conf["menuElements"] = arr;
-
-            // Update enabled and disabled modules
-            for (auto [_name, inst] : core::moduleManager.instances) {
-                if (!core::configManager.conf["moduleInstances"].contains(_name)) { continue; }
-                core::configManager.conf["moduleInstances"][_name]["enabled"] = inst.instance->isEnabled();
-            }
-
+            core::configManager.conf["max"] = fftMax;
             core::configManager.release(true);
         }
 
-        ImGui::EndChild();
+        ImGui::NewLine();
+
+        ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - (ImGui::CalcTextSize("Min").x / 2.0));
+        ImGui::TextUnformatted("Min");
+        ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - 10 * style::uiScale);
+        ImGui::SetItemUsingMouseWheel();
+        if (ImGui::VSliderFloat("##_9_", wfSliderSize, &fftMin, 0.0, -160.0f, "")) {
+            fftMin = std::min<float>(fftMax - 10, fftMin);
+            core::configManager.acquire();
+            core::configManager.conf["min"] = fftMin;
+            core::configManager.release(true);
+        }
     }
+    ImGui::EndChild();
+
+    // Right menu column
+    ImGui::NextColumn();
+    {
+        ImGui::PushID(ImGui::GetID("sdrpp_rightMenuToggle_btn"));
+        int buttonPadding = buttonPadding_normal;
+        float buttonWidth = buttonWidth_normal - buttonPadding * 2;
+        if (!showRightMenu) {
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + ImGui::GetContentRegionAvail().x - buttonWidth);
+        }
+        if (ImGui::ImageButton(showRightMenu ? icons::RIGHT_PANEL_CLOSE : icons::RIGHT_PANEL_OPEN, ImVec2(buttonWidth, buttonWidth), ImVec2(0, 0), ImVec2(1, 1), buttonPadding, ImVec4(0, 0, 0, 0), textCol)) {
+            showRightMenu = !showRightMenu;
+            core::configManager.acquire();
+            core::configManager.conf["showRightMenu"] = showRightMenu;
+            core::configManager.release(true);
+        }
+        ImGui::PopID();
+    }
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetTooltip("%s Side Panel", showRightMenu ? "Close" : "Open");
+    }
+
+    if (ImGui::BeginChild("RightMenu", ImVec2(0, 0), showRightMenu, ImGuiWindowFlags_None)) {
+        if (showRightMenu) {
+            ImGui::Spacing();
+
+            if (gui::menu.draw(firstMenuRender, Menu::MenuOption_Location::right)) {
+                core::configManager.acquire();
+                json arr = json::array();
+                for (int i = 0; i < gui::menu.order.size(); i++) {
+                    arr[i]["name"] = gui::menu.order[i].name;
+                    arr[i]["open"] = gui::menu.order[i].open;
+                    arr[i]["location"] = gui::menu.order[i].location;
+                }
+                core::configManager.conf["menuElements"] = arr;
+
+                // Update enabled and disabled modules
+                for (auto [_name, inst] : core::moduleManager.instances) {
+                    if (!core::configManager.conf["moduleInstances"].contains(_name)) { continue; }
+                    core::configManager.conf["moduleInstances"][_name]["enabled"] = inst.instance->isEnabled();
+                }
+
+                core::configManager.release(true);
+            }
+        }
+    }
+    ImGui::EndChild();
 
     if (startedWithMenuClosed) {
         startedWithMenuClosed = false;
-    } else {
+    }
+    else {
         firstMenuRender = false;
     }
 
@@ -735,6 +846,9 @@ void MainWindow::draw() {
     gui::waterfall.setFFTMax(fftMax);
     gui::waterfall.setWaterfallMin(fftMin);
     gui::waterfall.setWaterfallMax(fftMax);
+
+    // Popups
+    bandplanmenu::drawExplorer();
 
     ImGui::End();
 
@@ -778,6 +892,10 @@ bool MainWindow::sdrIsRunning() {
 bool MainWindow::isPlaying() {
     ZoneScoped;
     return playing;
+}
+int MainWindow::getTuningMode() {
+    ZoneScoped;
+    return tuningMode;
 }
 
 void MainWindow::setFirstMenuRender() {

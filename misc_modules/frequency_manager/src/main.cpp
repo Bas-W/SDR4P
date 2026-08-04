@@ -552,10 +552,11 @@ private:
         }
 
         // Bookmark list
-        if (ImGui::BeginTable(("freq_manager_bkm_table" + _this->name).c_str(), 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 200.0f * style::uiScale))) {
-            ImGui::TableSetupColumn("Name");
-            ImGui::TableSetupColumn("Bookmark");
-            ImGui::TableSetupScrollFreeze(2, 1);
+        if (ImGui::BeginTable(("freq_manager_bkm_table" + _this->name).c_str(), 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_ScrollY, ImVec2(0, 200.0f * style::uiScale))) {
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthStretch, 3.0f);
+            ImGui::TableSetupColumn("Frequency", ImGuiTableColumnFlags_WidthStretch, 2.0f);
+            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthStretch, 1.0f);
+            ImGui::TableSetupScrollFreeze(3, 1);
             ImGui::TableHeadersRow();
             for (auto& [name, bm] : _this->bookmarks) {
                 ImGui::TableNextRow();
@@ -576,7 +577,10 @@ private:
                 }
 
                 ImGui::TableSetColumnIndex(1);
-                ImGui::Text("%s %s", utils::formatFreq(bm.frequency).c_str(), demodModeList[bm.mode]);
+                ImGui::Text("%s", utils::formatFreq(bm.frequency).c_str());
+
+                ImGui::TableSetColumnIndex(2);
+                ImGui::Text("%s", demodModeList[bm.mode]);
                 ImVec2 max = ImGui::GetCursorPos();
             }
             ImGui::EndTable();

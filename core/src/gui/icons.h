@@ -13,6 +13,11 @@ namespace icons {
     extern ImTextureID UNMUTED;
     extern ImTextureID NORMAL_TUNING;
     extern ImTextureID CENTER_TUNING;
+    extern ImTextureID EXPLORE;
+    extern ImTextureID LEFT_PANEL_CLOSE;
+    extern ImTextureID LEFT_PANEL_OPEN;
+    extern ImTextureID RIGHT_PANEL_CLOSE;
+    extern ImTextureID RIGHT_PANEL_OPEN;
 
     GLuint loadTexture(std::string path);
     bool load(std::string resDir);
