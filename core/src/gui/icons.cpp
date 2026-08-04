@@ -18,6 +18,10 @@ namespace icons {
     ImTextureID NORMAL_TUNING;
     ImTextureID CENTER_TUNING;
     ImTextureID EXPLORE;
+    ImTextureID LEFT_PANEL_CLOSE;
+    ImTextureID LEFT_PANEL_OPEN;
+    ImTextureID RIGHT_PANEL_CLOSE;
+    ImTextureID RIGHT_PANEL_OPEN;
 
     GLuint loadTexture(std::string path) {
         int w, h, n;
@@ -49,6 +53,10 @@ namespace icons {
         NORMAL_TUNING = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/normal_tuning.png");
         CENTER_TUNING = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/center_tuning.png");
         EXPLORE = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/explore.png");
+        LEFT_PANEL_CLOSE = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/left_panel_close.png");
+        LEFT_PANEL_OPEN = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/left_panel_open.png");
+        RIGHT_PANEL_CLOSE = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/right_panel_close.png");
+        RIGHT_PANEL_OPEN = (ImTextureID)(uintptr_t)loadTexture(resDir + "/icons/right_panel_open.png");
 
         return true;
     }

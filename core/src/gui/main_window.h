@@ -54,9 +54,13 @@ private:
     std::string audioStreamName = "";
     std::string sourceName = "";
     int menuWidth = 300;
-    int rightMenuWidth = 300;
+    int menuWidthRight = 300;
     bool grabbingMenu = false;
+    bool grabbingMenuRight = false;
+    bool hoveringMenu = false;
+    bool hoveringMenuRight = false;
     int newWidth = 300;
+    int newWidthRight = 300;
     int fftHeight = 300;
     bool showMenu = true;
     bool showRightMenu = false;

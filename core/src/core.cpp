@@ -163,6 +163,7 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["menuElements"][7]["open"] = true;
 
     defConfig["menuWidth"] = 300;
+    defConfig["menuWidthRight"] = 300;
     defConfig["min"] = -120.0;
 
     // Module instances
