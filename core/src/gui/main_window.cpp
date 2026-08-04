@@ -719,7 +719,7 @@ void MainWindow::draw() {
 
     // Waterfall controls
     ImGui::NextColumn();
-    if (ImGui::BeginChild("WaterfallControls", ImVec2(0, 0), true, ImGuiWindowFlags_None)) {
+    if (ImGui::BeginChild("WaterfallControls", ImVec2(0, 0), true, ImGuiWindowFlags_NoScrollbar)) {
         ImVec2 windowSize = ImGui::GetWindowSize();
 
         ImGui::PushID(ImGui::GetID("sdrpp_bandplanExpl_btn"));
@@ -737,10 +737,16 @@ void MainWindow::draw() {
 
         ImGui::NewLine();
 
+        ImGuiStyle& style = ImGui::GetStyle();
+
+        // Shrink sliders to fit
+        float sliderHeight = std::clamp((ImGui::GetContentRegionAvail().y - style.WindowPadding.y - ImGui::GetTextLineHeight() * 6 - style.ItemSpacing.y * 2) / 3, 20.0f * style::uiScale, 150.0f * style::uiScale);
+        ImVec2 wfSliderSize(20.0 * style::uiScale, sliderHeight);
+
         ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - (ImGui::CalcTextSize("Zoom").x / 2.0));
         ImGui::TextUnformatted("Zoom");
         ImGui::SetCursorPosX((ImGui::GetWindowSize().x / 2.0) - 10 * style::uiScale);
-        ImVec2 wfSliderSize(20.0 * style::uiScale, 150.0 * style::uiScale);
+
         if (ImGui::VSliderFloat("##_7_", wfSliderSize, &bw, 1.0, 0.0, "")) {
             double factor = (double)bw * (double)bw;
 

@@ -10,7 +10,11 @@
 
 #define WINDOW_FLAGS ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBackground
 
+#ifdef __ANDROID__
+const int mainWindow_defaultMenuWidth = 600;
+#else
 const int mainWindow_defaultMenuWidth = 300;
+#endif
 
 class MainWindow {
 public:
