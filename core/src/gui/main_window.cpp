@@ -32,7 +32,7 @@
 const int narrowMenuWidth = 70.0f * style::uiScale;
 const int buttonWidth_normal = 35.0f * style::uiScale;
 const int buttonPadding_normal = 2.0f;
-const int edgeDragMargin = 4.0f * style::uiScale;
+const int edgeDragMargin = 6.0f * style::uiScale;
 
 void MainWindow::init() {
     ZoneScoped;
@@ -362,32 +362,20 @@ void MainWindow::draw() {
         core::configManager.release(true);
     }
 
-    // To Bar
-    // ImGui::BeginChild("TopBarChild", ImVec2(0, 49.0f * style::uiScale), false, ImGuiWindowFlags_HorizontalScrollbar);
-    ImVec2 btnSize(30 * style::uiScale, 30 * style::uiScale);
-    ImGui::PushID(ImGui::GetID("sdrpp_menu_btn"));
-    if (ImGui::ImageButton(icons::MENU, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_Menu, false)) {
-        showMenu = !showMenu;
-        core::configManager.acquire();
-        core::configManager.conf["showMenu"] = showMenu;
-        core::configManager.release(true);
-    }
-    ImGui::PopID();
-
-    ImGui::SameLine();
+    ImVec2 btnSize(buttonWidth_normal - buttonPadding_normal * 2, buttonWidth_normal - buttonPadding_normal * 2);
 
     bool tmpPlaySate = playing;
     if (playButtonLocked && !tmpPlaySate) { style::beginDisabled(); }
     if (playing) {
         ImGui::PushID(ImGui::GetID("sdrpp_stop_btn"));
-        if (ImGui::ImageButton(icons::STOP, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_End, false)) {
+        if (ImGui::ImageButton(icons::STOP, btnSize, ImVec2(0, 0), ImVec2(1, 1), buttonPadding_normal, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_End, false)) {
             setPlayState(false);
         }
         ImGui::PopID();
     }
     else { // TODO: Might need to check if there even is a device
         ImGui::PushID(ImGui::GetID("sdrpp_play_btn"));
-        if (ImGui::ImageButton(icons::PLAY, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_End, false)) {
+        if (ImGui::ImageButton(icons::PLAY, btnSize, ImVec2(0, 0), ImVec2(1, 1), buttonPadding_normal, ImVec4(0, 0, 0, 0), textCol) || ImGui::IsKeyPressed(ImGuiKey_End, false)) {
             setPlayState(true);
         }
         ImGui::PopID();
@@ -403,7 +391,7 @@ void MainWindow::draw() {
     ImGui::SameLine();
     float origY = ImGui::GetCursorPosY();
 
-    sigpath::sinkManager.showVolumeSlider(gui::waterfall.selectedVFO, "##_sdrpp_main_volume_", 248 * style::uiScale, btnSize.x, 5, true);
+    sigpath::sinkManager.showVolumeSlider(gui::waterfall.selectedVFO, "##_sdrpp_main_volume_", 200 * style::uiScale, buttonWidth_normal - buttonPadding_normal * 2, buttonPadding_normal, true);
 
     ImGui::SameLine();
 
@@ -415,7 +403,7 @@ void MainWindow::draw() {
     ImGui::SetCursorPosY(origY);
     if (tuningMode == tuner::TUNER_MODE_CENTER) {
         ImGui::PushID(ImGui::GetID("sdrpp_ena_st_btn"));
-        if (ImGui::ImageButton(icons::CENTER_TUNING, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol)) {
+        if (ImGui::ImageButton(icons::CENTER_TUNING, btnSize, ImVec2(0, 0), ImVec2(1, 1), buttonPadding_normal, ImVec4(0, 0, 0, 0), textCol)) {
             tuningMode = tuner::TUNER_MODE_NORMAL;
             gui::waterfall.VFOMoveSingleClick = false;
             core::configManager.acquire();
@@ -426,7 +414,7 @@ void MainWindow::draw() {
     }
     else { // TODO: Might need to check if there even is a device
         ImGui::PushID(ImGui::GetID("sdrpp_dis_st_btn"));
-        if (ImGui::ImageButton(icons::NORMAL_TUNING, btnSize, ImVec2(0, 0), ImVec2(1, 1), 5, ImVec4(0, 0, 0, 0), textCol)) {
+        if (ImGui::ImageButton(icons::NORMAL_TUNING, btnSize, ImVec2(0, 0), ImVec2(1, 1), buttonPadding_normal, ImVec4(0, 0, 0, 0), textCol)) {
             tuningMode = tuner::TUNER_MODE_CENTER;
             gui::waterfall.VFOMoveSingleClick = true;
             tuner::tune(tuner::TUNER_MODE_CENTER, gui::waterfall.selectedVFO, gui::freqSelect.frequency);
@@ -456,7 +444,7 @@ void MainWindow::draw() {
     // Logo button
     ImGui::SetCursorPosX(ImGui::GetWindowSize().x - (48 * style::uiScale));
     ImGui::SetCursorPosY(10.0f * style::uiScale);
-    if (ImGui::ImageButton(icons::LOGO, ImVec2(32 * style::uiScale, 32 * style::uiScale), ImVec2(0, 0), ImVec2(1, 1), 0)) {
+    if (ImGui::ImageButton(icons::LOGO, ImVec2(buttonWidth_normal, buttonWidth_normal), ImVec2(0, 0), ImVec2(1, 1), 0)) {
         showCredits = true;
     }
     if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
@@ -484,16 +472,17 @@ void MainWindow::draw() {
 
     // Handle menu resize
     ImVec2 mousePos = ImGui::GetMousePos();
+    ImGuiStyle& style = ImGui::GetStyle();
     if (!lockWaterfallControls && showMenu) {
         float curY = ImGui::GetCursorPosY();
         bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
         bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
         if (grabbingMenu) {
-            newWidth = mousePos.x;
+            newWidth = mousePos.x - style.CellPadding.x * 2;
             newWidth = std::clamp<float>(newWidth, 250, ImGui::GetWindowContentRegionMax().x - 250);
-            ImGui::GetForegroundDrawList()->AddLine(ImVec2(newWidth, curY), ImVec2(newWidth, ImGui::GetWindowContentRegionMax().y - 10), ImGui::GetColorU32(ImGuiCol_SeparatorActive));
+            ImGui::GetForegroundDrawList()->AddLine(ImVec2(newWidth + style.CellPadding.x * 2, curY), ImVec2(newWidth + style.CellPadding.x * 2, ImGui::GetWindowContentRegionMax().y), ImGui::GetColorU32(ImGuiCol_SeparatorActive));
         }
-        if (mousePos.x >= newWidth - edgeDragMargin && mousePos.x <= newWidth + edgeDragMargin && mousePos.y > curY) {
+        if (mousePos.x >= newWidth + style.CellPadding.x * 2 - edgeDragMargin && mousePos.x <= newWidth + style.CellPadding.x * 2 + edgeDragMargin && mousePos.y > curY) {
             hoveringMenu = true;
             if (click) {
                 grabbingMenu = true;
@@ -514,13 +503,13 @@ void MainWindow::draw() {
         float curY = ImGui::GetCursorPosY();
         bool click = ImGui::IsMouseClicked(ImGuiMouseButton_Left);
         bool down = ImGui::IsMouseDown(ImGuiMouseButton_Left);
-        float cellPadding = ImGui::GetStyle().CellPadding.x;
         if (grabbingMenuRight) {
-            newWidthRight = ImGui::GetWindowContentRegionMax().x - narrowMenuWidth - cellPadding - mousePos.x;
+            newWidthRight = ImGui::GetWindowContentRegionMax().x - mousePos.x - narrowMenuWidth - style.CellPadding.x * 2;
             newWidthRight = std::clamp<float>(newWidthRight, 250, ImGui::GetWindowContentRegionMax().x - 250);
-            ImGui::GetForegroundDrawList()->AddLine(ImVec2(ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - cellPadding, curY), ImVec2(ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth, ImGui::GetWindowContentRegionMax().y - 10), ImGui::GetColorU32(ImGuiCol_SeparatorActive));
+            ImGui::GetForegroundDrawList()->AddLine(ImVec2(ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - style.CellPadding.x * 2, curY),
+                ImVec2(ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - style.CellPadding.x * 2, ImGui::GetWindowContentRegionMax().y), ImGui::GetColorU32(ImGuiCol_SeparatorActive));
         }
-        if (mousePos.x >= ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - cellPadding - edgeDragMargin && mousePos.x <= ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - cellPadding + edgeDragMargin && mousePos.y > curY) {
+        if (mousePos.x >= ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - style.CellPadding.x * 2 - edgeDragMargin && mousePos.x <= ImGui::GetWindowContentRegionMax().x - newWidthRight - narrowMenuWidth - style.CellPadding.x * 2 + edgeDragMargin && mousePos.y > curY) {
             hoveringMenuRight = true;
             if (click) {
                 grabbingMenuRight = true;
@@ -548,8 +537,8 @@ void MainWindow::draw() {
     displaymenu::checkKeybinds();
 
     // Columns scaling
-    float leftPanelWidth = showMenu ? menuWidth : (buttonWidth_normal + buttonPadding_normal * 2) * 1.5f;
-    float rightPanelWidth = showRightMenu ? menuWidthRight : (buttonWidth_normal + buttonPadding_normal * 2) * 1.5f;
+    float leftPanelWidth = showMenu ? menuWidth : (buttonWidth_normal + buttonPadding_normal * 2) * 1.2f;
+    float rightPanelWidth = showRightMenu ? menuWidthRight : (buttonWidth_normal + buttonPadding_normal * 2) * 1.2f;
     float centerPanelWidth = std::max<int>(ImGui::GetWindowContentRegionMax().x - leftPanelWidth - rightPanelWidth - narrowMenuWidth, 100.0f * style::uiScale);
 
     ImGui::Columns(4, "WindowColumns", false);
@@ -568,6 +557,9 @@ void MainWindow::draw() {
         }
         if (ImGui::ImageButton(showMenu ? icons::LEFT_PANEL_CLOSE : icons::LEFT_PANEL_OPEN, ImVec2(buttonWidth, buttonWidth), ImVec2(0, 0), ImVec2(1, 1), buttonPadding, ImVec4(0, 0, 0, 0), textCol)) {
             showMenu = !showMenu;
+            core::configManager.acquire();
+            core::configManager.conf["showMenu"] = showMenu;
+            core::configManager.release(true);
         }
         ImGui::PopID();
 
@@ -622,8 +614,10 @@ void MainWindow::draw() {
                 ImGui::Checkbox("Lock Menu Order", &gui::menu.locked);
 
                 if (ImGui::Button("Reset side panel sizes")) {
-                    menuWidth = 300;
-                    menuWidthRight = 300;
+                    menuWidth = mainWindow_defaultMenuWidth;
+                    menuWidthRight = mainWindow_defaultMenuWidth;
+                    newWidth = menuWidth;
+                    newWidthRight = menuWidthRight;
                     core::configManager.acquire();
                     core::configManager.conf["menuWidth"] = menuWidth;
                     core::configManager.conf["menuWidthRight"] = menuWidthRight;
@@ -638,9 +632,7 @@ void MainWindow::draw() {
     ImGui::EndChild();
 
     // Center Column
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
     ImGui::NextColumn();
-    ImGui::PopStyleVar();
 
     ImGui::BeginChild("Waterfall");
 
@@ -801,6 +793,9 @@ void MainWindow::draw() {
         }
         if (ImGui::ImageButton(showRightMenu ? icons::RIGHT_PANEL_CLOSE : icons::RIGHT_PANEL_OPEN, ImVec2(buttonWidth, buttonWidth), ImVec2(0, 0), ImVec2(1, 1), buttonPadding, ImVec4(0, 0, 0, 0), textCol)) {
             showRightMenu = !showRightMenu;
+            core::configManager.acquire();
+            core::configManager.conf["showRightMenu"] = showRightMenu;
+            core::configManager.release(true);
         }
         ImGui::PopID();
     }

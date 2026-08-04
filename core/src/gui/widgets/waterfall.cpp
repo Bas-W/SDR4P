@@ -831,7 +831,7 @@ namespace ImGui {
         widgetEndPos = ImGui::GetWindowContentRegionMax();
         widgetPos.x += window->Pos.x;
         widgetPos.y += window->Pos.y;
-        widgetEndPos.x += window->Pos.x - 4; // Padding
+        widgetEndPos.x += window->Pos.x;
         widgetEndPos.y += window->Pos.y;
         widgetSize = ImVec2(widgetEndPos.x - widgetPos.x, widgetEndPos.y - widgetPos.y);
 

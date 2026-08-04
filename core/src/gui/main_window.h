@@ -10,6 +10,8 @@
 
 #define WINDOW_FLAGS ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBackground
 
+const int mainWindow_defaultMenuWidth = 300;
+
 class MainWindow {
 public:
     void init();
@@ -53,8 +55,8 @@ private:
     bool showCredits = false;
     std::string audioStreamName = "";
     std::string sourceName = "";
-    int menuWidth = 300;
-    int menuWidthRight = 300;
+    int menuWidth = mainWindow_defaultMenuWidth;
+    int menuWidthRight = mainWindow_defaultMenuWidth;
     bool grabbingMenu = false;
     bool grabbingMenuRight = false;
     bool hoveringMenu = false;
