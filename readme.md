@@ -6,14 +6,21 @@
 * Improved bookmarks
   * Bookmarks displayed on FFT / waterfall plot now stack instead of overlapping
   * Bookmark color can be customized
+* Bandplan Explorer
+  * Displays list of all bands in the currently displayed bandplan
+  * The selected VFO can be tuned to the start or end frequency of a band by clicking them in the table
 * VFO
   * The VFO indicator now displays its name
   * The VFO indicator is colored more clearly
   * The VFO bandwidth indicator visibility is improved
-* Menu
-  * Added menu bar on right side [WIP]
+* Main window
+  * Added right side panel
+  * Left and right side panels can be closed separately
+  * Widgets can be displayed in either side panel
 * FFT / waterfall plot
   * Added ability to zoom using CTRL + mouse wheel
+* Android
+  * Small tweaks have been made to sizing and layout to better suit mobile devices
 
 **SDR++ features:**
 * Multi VFO
