@@ -1,32 +1,39 @@
 #pragma once
+#include "dsp/stream.h"
+#include "dsp/types.h"
+#include "dsp/sink/handler_sink.h"
+#include "utils/optionlist.h"
 #include <atomic>
 #include <cstdint>
 #include <memory>
-#include <mutex>
 #include <thread>
-#include <utility>
 #include <vector>
+#include "utils/ring_buffer.h"
 
 namespace audio_analyzer {
     constexpr uint32_t fftFreqSamples_default = 1024;
     constexpr uint32_t fftSamplerate_default = 1024;
     constexpr uint32_t fftSamplecount_default = 1024;
 
+    static void stereoHandler(dsp::stereo_t* data, int count, void* ctx);
+
     class Processor {
     public:
+        Processor();
         ~Processor();
 
-        void audioRingBufInit(uint32_t size);
-        void audioRingBufFree();
-        void audioRingBufPush(float* data, uint32_t count);
-        void audioRingBufRead(float* dest, uint32_t offset, uint32_t count);
+        void resizeBuffers(uint32_t size);
 
+        rbuf::SharedRingBuffer m_ringBufL;
+        rbuf::SharedRingBuffer m_ringBufR;
+
+        bool setAudioStream(dsp::stream<dsp::stereo_t>* stream);
+        void deselectStream();
     private:
-        std::mutex m_audioRingBufMtx;
-        std::shared_ptr<float> m_audioRingBuf;
-        uint32_t m_audioRingBufIdx = 0;
-        uint32_t m_audioRingBufSize = 0;
-        bool m_audioRingBufWrapped = false;
+        std::recursive_mutex m_recMtx;
+
+        dsp::stream<dsp::stereo_t>* m_audioStream = nullptr;
+        dsp::sink::Handler<dsp::stereo_t> m_stereoSink;
     };
 
     class ProcessorWorker {
@@ -50,20 +57,32 @@ namespace audio_analyzer {
     public:
         ProcessorDisplay(std::shared_ptr<Processor> processor, uint32_t size);
 
-        void resizeBuffer(uint32_t size);
-        void updateBuffer();
-        std::shared_ptr<const float> getBuffer();
+        void setAudioStreams(std::shared_ptr<OptionList<std::string, std::string>> audioStreams);
+
+        void draw();
+
+        void resizeBuffers(uint32_t size);
+        void updateBuffers();
+        std::shared_ptr<const float> getBufferLeft();
+        std::shared_ptr<const float> getBufferRight();
         const uint32_t bufferSize();
 
     private:
         uint32_t m_bufferSize;
 
         std::shared_ptr<Processor> m_processor;
-        std::shared_ptr<float> m_buffer;
+        std::shared_ptr<float> m_bufferL;
+        std::shared_ptr<float> m_bufferR;
+
+        std::shared_ptr<OptionList<std::string, std::string>> m_audioStreams;
+        int m_audioStreamId = 0;
     };
 
     class AudioAnalyzer {
     public:
+        AudioAnalyzer();
+
+        void doPostInit();
 
         void addProcessorDisplay(std::shared_ptr<ProcessorDisplay> processorDisplay);
 
@@ -71,5 +90,7 @@ namespace audio_analyzer {
 
     private:
         std::vector<std::shared_ptr<ProcessorDisplay>> m_processorDisplays;
+
+        std::shared_ptr<OptionList<std::string, std::string>> m_audioStreams;
     };
 }

@@ -1,83 +1,59 @@
-//
-// Created by Bas on 05/08/2026.
-//
-
 #include "audio_analyzer.h"
-
-#include "Tracy.hpp"
-#include "imgui.h"
-#include "implot.h"
-#include "utils/flog.h"
 
 #include <cmath>
 #include <cstdlib>
-#include <cstring>
 #include <utility>
+#include "Tracy.hpp"
+#include "imgui.h"
+#include "implot.h"
+#include "signal_path/signal_path.h"
+#include "utils/flog.h"
 
 namespace audio_analyzer {
+    static void stereoHandler(dsp::stereo_t* data, int count, void* ctx) {
+        Processor* _this = static_cast<Processor*>(ctx);
+        if (_this->m_ringBufL.getSize() > 0) {
+            _this->m_ringBufL.push(&data->l, count);
+        }
+        if (_this->m_ringBufR.getSize() > 0) {
+            _this->m_ringBufR.push(&data->r, count);
+        }
+    }
+    Processor::Processor() {
+        m_stereoSink.init(m_audioStream, stereoHandler, this);
+    }
     Processor::~Processor() {
-        audioRingBufFree();
+        m_stereoSink.stop();
     }
 
-    /// Initialize ring buffer
-    ///
-    /// Param size: amount of values to keep (not bytes)
-    void Processor::audioRingBufInit(uint32_t size) {
-        ZoneScoped;
-        std::lock_guard<std::mutex> lck(m_audioRingBufMtx);
+    void Processor::resizeBuffers(uint32_t size) {
+        std::lock_guard<std::recursive_mutex> lck(m_recMtx);
 
-        m_audioRingBufIdx = 0;
-        m_audioRingBufSize = size;
-        m_audioRingBuf = std::shared_ptr<float>(static_cast<float*>(std::malloc(size * sizeof(float))), free);
+        m_ringBufL.freeBuf();
+        m_ringBufR.freeBuf();
+
+        m_ringBufL.init(size);
+        m_ringBufR.init(size);
     }
 
-    void Processor::audioRingBufFree() {
-        ZoneScoped;
-        std::lock_guard<std::mutex> lck(m_audioRingBufMtx);
-        m_audioRingBuf.reset();
-        m_audioRingBufSize = 0;
+    bool Processor::setAudioStream(dsp::stream<dsp::stereo_t>* stream) {
+        if (!stream) return false;
+
+        std::lock_guard<std::recursive_mutex> lck(m_recMtx);
+        deselectStream();
+
+        m_audioStream = stream;
+
+        m_stereoSink.setInput(m_audioStream);
+        m_stereoSink.start();
+
+        return true;
     }
 
-    /// Push data to ring buffer
-    void Processor::audioRingBufPush(float* data, uint32_t count) {
-        ZoneScoped;
-        std::lock_guard<std::mutex> lck(m_audioRingBufMtx);
-
-        flog::debug("idx: {}", m_audioRingBufIdx);
-        if (m_audioRingBufIdx + count <= m_audioRingBufSize) {
-            std::memcpy(m_audioRingBuf.get() + m_audioRingBufIdx, data, count * sizeof(float));
-            m_audioRingBufIdx += count;
-        }
-        else {
-            m_audioRingBufWrapped = true;
-            uint32_t remaining = count;
-            while (remaining > 0) {
-                uint32_t nToAdd = std::min(remaining, m_audioRingBufSize - m_audioRingBufIdx);
-                std::memcpy(m_audioRingBuf.get() + m_audioRingBufIdx, data + count - remaining, nToAdd * sizeof(float));
-                m_audioRingBufIdx = (m_audioRingBufIdx + nToAdd) % m_audioRingBufSize;
-                remaining -= nToAdd;
-            }
-        }
-    }
-
-    /// Read from ringbuffer to regular buffer;
-    void Processor::audioRingBufRead(float* dest, uint32_t offset, uint32_t count) {
-        ZoneScoped;
-        std::lock_guard<std::mutex> lck(m_audioRingBufMtx);
-
-        uint32_t idxToRead = (m_audioRingBufWrapped ? m_audioRingBufIdx : 0) + offset;
-        if (idxToRead + count <= m_audioRingBufSize) {
-            std::memcpy(dest, m_audioRingBuf.get() + idxToRead, count * sizeof(float));
-        }
-        else {
-            uint32_t remaining = count;
-            while (remaining > 0) {
-                uint32_t nToRead = std::min(remaining, m_audioRingBufSize - idxToRead);
-                std::memcpy(dest + count - remaining, m_audioRingBuf.get() + idxToRead, nToRead * sizeof(float));
-                remaining -= nToRead;
-                idxToRead = remaining % m_audioRingBufSize;
-            }
-        }
+    void Processor::deselectStream() {
+        std::lock_guard<std::recursive_mutex> lck(m_recMtx);
+        m_stereoSink.stop();
+        m_audioStream = NULL;
     }
 
     ProcessorWorker::~ProcessorWorker() {
@@ -112,7 +88,7 @@ namespace audio_analyzer {
                 if (iterator > 100000) iterator = 1.0f;
             }
 
-            m_processor->audioRingBufPush(buf, 4800);
+            m_processor->m_ringBufL.push(buf, 4800);
 
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
@@ -121,40 +97,89 @@ namespace audio_analyzer {
 
     ProcessorDisplay::ProcessorDisplay(std::shared_ptr<Processor> processor, uint32_t size) {
         m_processor = std::move(processor);
-        resizeBuffer(size);
+        resizeBuffers(size);
     }
 
-    void ProcessorDisplay::resizeBuffer(uint32_t size) {
-        if (m_buffer != nullptr) m_buffer.reset();
-        m_buffer = std::shared_ptr<float>(static_cast<float*>(malloc(size * sizeof(float))), free);
+    void ProcessorDisplay::setAudioStreams(std::shared_ptr<OptionList<std::string, std::string>> audioStreams) {
+        m_audioStreams = audioStreams;
+    }
+
+    void ProcessorDisplay::draw() {
+        if (ImGui::Combo("##_recorder_stream", &m_audioStreamId, m_audioStreams->txt)) {
+            m_processor->setAudioStream(sigpath::sinkManager.bindStream(m_audioStreams->value(m_audioStreamId)));
+        }
+
+        if (ImPlot::BeginAlignedPlots("Signal")) {
+            static ImPlotRange xRange, yRange;
+
+            updateBuffers();
+
+            float ySize = ImGui::GetContentRegionAvail().y;
+
+            if (ImPlot::BeginPlot("Left", ImVec2(-1, ySize / 2.0f))) {
+                ImPlot::SetupAxisLinks(ImAxis_X1, &xRange.Min, &xRange.Max);
+                ImPlot::SetupAxisLinks(ImAxis_Y1, &yRange.Min, &yRange.Max);
+                ImPlot::PlotLine("Left", getBufferLeft().get(), bufferSize());
+                ImPlot::EndPlot();
+            }
+
+            if (ImPlot::BeginPlot("Right", ImVec2(-1, ySize / 2.0f))) {
+                ImPlot::SetupAxisLinks(ImAxis_X1, &xRange.Min, &xRange.Max);
+                ImPlot::SetupAxisLinks(ImAxis_Y1, &yRange.Min, &yRange.Max);
+                ImPlot::PlotLine("Right", getBufferRight().get(), bufferSize());
+                ImPlot::EndPlot();
+            }
+
+            ImPlot::EndAlignedPlots();
+        }
+    }
+
+    void ProcessorDisplay::resizeBuffers(uint32_t size) {
+        if (m_bufferL != nullptr) m_bufferL.reset();
+        if (m_bufferR != nullptr) m_bufferR.reset();
+        m_bufferL = std::shared_ptr<float>(static_cast<float*>(malloc(size * sizeof(float))), free);
+        m_bufferR = std::shared_ptr<float>(static_cast<float*>(malloc(size * sizeof(float))), free);
         m_bufferSize = size;
     }
 
-    void ProcessorDisplay::updateBuffer() {
-        m_processor->audioRingBufRead(m_buffer.get(), 0, m_bufferSize);
+    void ProcessorDisplay::updateBuffers() {
+        m_processor->m_ringBufL.read(m_bufferL.get(), 0, m_bufferSize);
+        m_processor->m_ringBufR.read(m_bufferR.get(), 0, m_bufferSize);
     }
 
-    std::shared_ptr<const float> ProcessorDisplay::getBuffer() {
-        return m_buffer;
+    std::shared_ptr<const float> ProcessorDisplay::getBufferLeft() {
+        return m_bufferL;
     }
+    std::shared_ptr<const float> ProcessorDisplay::getBufferRight() {
+        return m_bufferR;
+    }
+
     const uint32_t ProcessorDisplay::bufferSize() {
         return m_bufferSize;
     }
 
+    AudioAnalyzer::AudioAnalyzer() {
+        m_audioStreams = std::make_shared<OptionList<std::string, std::string>>();
+    }
+
+    void AudioAnalyzer::doPostInit() {
+        m_audioStreams->clear();
+        auto names = sigpath::sinkManager.getStreamNames();
+        for (const auto& name : names) {
+            m_audioStreams->define(name, name, name);
+        }
+    }
     void AudioAnalyzer::addProcessorDisplay(std::shared_ptr<ProcessorDisplay> processorDisplay) {
+        processorDisplay->setAudioStreams(m_audioStreams);
         m_processorDisplays.push_back(processorDisplay);
     }
     void AudioAnalyzer::draw() {
         ZoneScoped;
         if (ImGui::BeginChild("##srdpp_audioAnalyzer")) {
             for (int i = 0; i < m_processorDisplays.size(); i++) {
-                if (ImPlot::BeginPlot(("##audioAnalyzer_plot_" + std::to_string(i)).c_str(), ImVec2(-1, 0), ImPlotFlags_None)) {
-                    m_processorDisplays[i]->updateBuffer();
-
-                    ImPlot::PlotLine("Signal", m_processorDisplays[i]->getBuffer().get(), m_processorDisplays[i]->bufferSize());
-
-                    ImPlot::EndPlot();
-                }
+                ImGui::BeginChild(("##audioAnalyzer_processor_" + std::to_string(i)).c_str());
+                m_processorDisplays[i]->draw();
+                ImGui::EndChild();
             }
         }
         ImGui::EndChild();

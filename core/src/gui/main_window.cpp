@@ -42,12 +42,10 @@ void MainWindow::init() {
 
     //todo: temporary, fix later
     std::shared_ptr<audio_analyzer::Processor> processor = std::make_shared<audio_analyzer::Processor>();
-    processor->audioRingBufInit(480000);
+    processor->resizeBuffers(480000);
 
-    std::shared_ptr<audio_analyzer::ProcessorDisplay> processorDisplay = std::make_shared<audio_analyzer::ProcessorDisplay>(processor, 2048);
+    std::shared_ptr<audio_analyzer::ProcessorDisplay> processorDisplay = std::make_shared<audio_analyzer::ProcessorDisplay>(processor, 480000);
     gui::audioAnalyzer.addProcessorDisplay(processorDisplay);
-
-    processorWorker.init(processor);
 
     credits::init();
 
@@ -259,8 +257,7 @@ void MainWindow::init() {
     initComplete = true;
 
     core::moduleManager.doPostInitAll();
-
-    processorWorker.start();
+    gui::audioAnalyzer.doPostInit();
 }
 
 float* MainWindow::acquireFFTBuffer(void* ctx) {

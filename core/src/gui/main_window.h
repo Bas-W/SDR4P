@@ -10,6 +10,7 @@
 #include <utils/event.h>
 #include <mutex>
 #include <gui/tuner.h>
+#include <utils/ring_buffer.h>
 
 #define WINDOW_FLAGS ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBackground
 
@@ -45,8 +46,6 @@ public:
 
 private:
     static void vfoAddedHandler(VFOManager::VFO* vfo, void* ctx);
-
-    audio_analyzer::ProcessorWorker processorWorker;
 
     // FFT Variables
     int fftSize = 8192 * 8;
