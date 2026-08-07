@@ -15,6 +15,7 @@
 #include <gui/menus/theme.h>
 #include <backend.h>
 #include "Tracy.hpp"
+#include <implot.h>
 
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 
@@ -387,6 +388,8 @@ int sdrpp_main(int argc, char* argv[]) {
 
     // Initialize SmGui in normal mode
     SmGui::init(false);
+
+    ImPlot::CreateContext();
 
     if (!style::loadFonts(resDir)) { return -1; }
     thememenu::init(resDir);

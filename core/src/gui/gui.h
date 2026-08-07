@@ -1,4 +1,5 @@
 #pragma once
+#include <gui/widgets/audio_analyzer.h>
 #include <gui/widgets/waterfall.h>
 #include <gui/widgets/frequency_select.h>
 #include <gui/widgets/menu.h>
@@ -13,6 +14,7 @@ namespace gui {
     SDRPP_EXPORT Menu menu;
     SDRPP_EXPORT ThemeManager themeManager;
     SDRPP_EXPORT MainWindow mainWindow;
+    SDRPP_EXPORT audio_analyzer::AudioAnalyzer audioAnalyzer;
 
     void selectSource(std::string name);
 };

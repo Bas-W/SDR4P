@@ -40,6 +40,15 @@ void MainWindow::init() {
     gui::waterfall.init();
     gui::waterfall.setRawFFTSize(fftSize);
 
+    //todo: temporary, fix later
+    std::shared_ptr<audio_analyzer::Processor> processor = std::make_shared<audio_analyzer::Processor>();
+    processor->audioRingBufInit(480000);
+
+    std::shared_ptr<audio_analyzer::ProcessorDisplay> processorDisplay = std::make_shared<audio_analyzer::ProcessorDisplay>(processor, 2048);
+    gui::audioAnalyzer.addProcessorDisplay(processorDisplay);
+
+    processorWorker.init(processor);
+
     credits::init();
 
     core::configManager.acquire();
@@ -250,6 +259,8 @@ void MainWindow::init() {
     initComplete = true;
 
     core::moduleManager.doPostInitAll();
+
+    processorWorker.start();
 }
 
 float* MainWindow::acquireFFTBuffer(void* ctx) {
@@ -634,10 +645,16 @@ void MainWindow::draw() {
     // Center Column
     ImGui::NextColumn();
 
-    ImGui::BeginChild("Waterfall");
+    ImGui::BeginChild("Waterfall", ImVec2(0, -400 * style::uiScale));
 
     // @TODO: add bottom toolbar?
     gui::waterfall.draw();
+
+    ImGui::EndChild();
+
+    ImGui::BeginChild("Audio Analyzer");
+
+    gui::audioAnalyzer.draw();
 
     ImGui::EndChild();
 

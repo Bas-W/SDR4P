@@ -1,4 +1,7 @@
 #pragma once
+#include "widgets/audio_analyzer.h"
+
+
 #include <fftw3.h>
 #include <dsp/types.h>
 #include <dsp/stream.h>
@@ -42,6 +45,8 @@ public:
 
 private:
     static void vfoAddedHandler(VFOManager::VFO* vfo, void* ctx);
+
+    audio_analyzer::ProcessorWorker processorWorker;
 
     // FFT Variables
     int fftSize = 8192 * 8;

@@ -37,6 +37,10 @@ if (OPT_ENABLE_TRACY)
     target_compile_definitions(sdrpp_core PUBLIC TRACY_ENABLE)
 endif()
 
+# Add implot
+target_sources(sdrpp_core PRIVATE "${CMAKE_SOURCE_DIR}/thirdparty/implot/implot.cpp" "${CMAKE_SOURCE_DIR}/thirdparty/implot/implot_items.cpp")
+target_include_directories(sdrpp_core PUBLIC "${CMAKE_SOURCE_DIR}/thirdparty/implot")
+
 # Set compiler options
 target_compile_options(sdrpp_core PRIVATE ${SDRPP_COMPILER_FLAGS})
 
