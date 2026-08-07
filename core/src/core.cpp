@@ -288,7 +288,7 @@ int sdrpp_main(int argc, char* argv[]) {
     defConfig["modulesDirectory"] = root + "/modules";
     defConfig["resourcesDirectory"] = root + "/res";
 #else
-    defConfig["modulesDirectory"] = INSTALL_PREFIX "/lib/sdrpp/plugins";
+    defConfig["modulesDirectory"] = INSTALL_PREFIX "/lib/sdr4p/plugins";
     defConfig["resourcesDirectory"] = INSTALL_PREFIX "/share/sdr4p";
 #endif
 
