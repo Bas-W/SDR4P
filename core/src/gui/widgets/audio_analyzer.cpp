@@ -110,7 +110,8 @@ namespace audio_analyzer {
         }
 
         if (ImPlot::BeginAlignedPlots("Signal")) {
-            static ImPlotRange xRange, yRange;
+            static ImPlotRange xRange{0.0, static_cast<double>(bufferSize())};
+            static ImPlotRange yRange{-1.0, 1.0};
 
             updateBuffers();
 
@@ -169,13 +170,23 @@ namespace audio_analyzer {
             m_audioStreams->define(name, name, name);
         }
     }
-    void AudioAnalyzer::addProcessorDisplay(std::shared_ptr<ProcessorDisplay> processorDisplay) {
+
+    void AudioAnalyzer::addProcessorDisplay() {
+        std::shared_ptr<audio_analyzer::Processor> processor = std::make_shared<audio_analyzer::Processor>();
+        processor->resizeBuffers(480000);
+
+        std::shared_ptr<audio_analyzer::ProcessorDisplay> processorDisplay = std::make_shared<audio_analyzer::ProcessorDisplay>(processor, 480000);
+
         processorDisplay->setAudioStreams(m_audioStreams);
         m_processorDisplays.push_back(processorDisplay);
     }
+
     void AudioAnalyzer::draw() {
         ZoneScoped;
         if (ImGui::BeginChild("##srdpp_audioAnalyzer")) {
+            if (ImGui::Button("Add")) {
+                addProcessorDisplay();
+            }
             for (int i = 0; i < m_processorDisplays.size(); i++) {
                 ImGui::BeginChild(("##audioAnalyzer_processor_" + std::to_string(i)).c_str());
                 m_processorDisplays[i]->draw();

@@ -65,7 +65,7 @@ namespace rbuf {
                 uint32_t nToRead = std::min(remaining, m_size - idxToRead);
                 std::memcpy(dest + count - remaining, m_buf.get() + idxToRead, nToRead * sizeof(float));
                 remaining -= nToRead;
-                idxToRead = remaining % m_size;
+                idxToRead = 0;
             }
         }
     }

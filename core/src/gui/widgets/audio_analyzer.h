@@ -84,7 +84,7 @@ namespace audio_analyzer {
 
         void doPostInit();
 
-        void addProcessorDisplay(std::shared_ptr<ProcessorDisplay> processorDisplay);
+        void addProcessorDisplay();
 
         void draw();
 
