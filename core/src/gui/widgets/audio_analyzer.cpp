@@ -10,89 +10,114 @@
 #include "utils/flog.h"
 
 namespace audio_analyzer {
-    static void stereoHandler(dsp::stereo_t* data, int count, void* ctx) {
+    void Processor::stereoHandler(dsp::stereo_t* data, int count, void* ctx) {
         Processor* _this = static_cast<Processor*>(ctx);
-        if (_this->m_ringBufL.getSize() > 0) {
-            _this->m_ringBufL.push(&data->l, count);
-        }
-        if (_this->m_ringBufR.getSize() > 0) {
-            _this->m_ringBufR.push(&data->r, count);
+        if (_this->m_audioRingBufL.getSize() > 0 && _this->m_audioRingBufR.getSize() > 0) {
+            _this->m_audioRingBufL.push(&data->l, count);
+            _this->m_audioRingBufR.push(&data->r, count);
+            _this->m_newSamples += count;
+            _this->m_signalProcessFft.notify_one();
         }
     }
+
+    void Processor::fftHandler() {
+        while (m_fftHandlerShouldRun.load()) {
+            std::unique_lock<std::mutex> lock(m_fftHandlerMutex);
+            m_signalProcessFft.wait_for(lock, std::chrono::milliseconds(10), [this] {return m_newSamples.load() > m_fftSampleCount;});
+            processFft();
+        }
+    }
+
+    bool Processor::processFft() {
+        if (m_newSamples < m_fftSampleCount) return false;
+
+        while (m_newSamples >= m_fftSampleCount) {
+            m_audioRingBufL.read(m_fftInBuf, m_audioRingBufL.getSize() - m_newSamples, m_fftSampleCount);
+            fft::calcFft(m_fftInBuf, m_fftOutBufComplex, m_fftSampleCount);
+            m_fftRingBufL.push(m_fftOutBufComplex, m_fftSampleCount / 2);
+
+            m_audioRingBufR.read(m_fftInBuf, m_audioRingBufR.getSize() - m_newSamples, m_fftSampleCount);
+            fft::calcFft(m_fftInBuf, m_fftOutBufComplex, m_fftSampleCount);
+            m_fftRingBufR.push(m_fftOutBufComplex, m_fftSampleCount / 2);
+
+            m_newSamples -= m_fftSampleCount;
+
+            flog::debug("fft calculated");
+        }
+
+        return true;
+    }
+
+    void Processor::fftHandlerStart() {
+        if (m_fftHandlerShouldRun.load() && m_fftHandlerThread.joinable()) return;
+        m_fftHandlerShouldRun = true;
+        m_fftHandlerThread = std::thread([this] {this->fftHandler();});
+    }
+
+    void Processor::fftHandlerStop() {
+        m_fftHandlerShouldRun = false;
+        if (m_fftHandlerThread.joinable()) m_fftHandlerThread.join();
+    }
+
     Processor::Processor() {
+        m_fftHandlerShouldRun = false;
+
+        m_newSamples = 0;
+        m_fftFreqBinSize = fftFreqBinSize_default;
+        m_fftSampleCount = fftSampleCount_default;
         m_stereoSink.init(m_audioStream, stereoHandler, this);
+
+        m_fftInBuf = static_cast<float*>(malloc(m_fftSampleCount * sizeof(float)));
+        m_fftOutBufComplex = static_cast<std::complex<float>*>(malloc(m_fftSampleCount / 2 * sizeof(std::complex<float>)));
     }
+
     Processor::~Processor() {
         m_stereoSink.stop();
+        free(m_fftInBuf);
     }
 
     void Processor::resizeBuffers(uint32_t size) {
-        std::lock_guard<std::recursive_mutex> lck(m_recMtx);
+        std::lock_guard<std::mutex> lck(m_mutex);
 
-        m_ringBufL.freeBuf();
-        m_ringBufR.freeBuf();
+        m_audioRingBufL.freeBuf();
+        m_audioRingBufR.freeBuf();
+        m_fftRingBufL.freeBuf();
+        m_fftRingBufR.freeBuf();
 
-        m_ringBufL.init(size);
-        m_ringBufR.init(size);
+        m_audioRingBufL.init(size);
+        m_audioRingBufR.init(size);
+        m_fftRingBufL.init(size / 2.0f);
+        m_fftRingBufR.init(size / 2.0f);
     }
 
-    bool Processor::setAudioStream(dsp::stream<dsp::stereo_t>* stream) {
-        if (!stream) return false;
+    bool Processor::setAudioStream(dsp::stream<dsp::stereo_t>* stream, uint32_t streamRate) {
+        if (!stream || streamRate == 0) return false;
 
-        std::lock_guard<std::recursive_mutex> lck(m_recMtx);
         deselectStream();
 
+        std::lock_guard<std::mutex> lck(m_mutex);
+
         m_audioStream = stream;
+        m_streamRate = streamRate;
+
+        m_fftInBufSize = m_streamRate / m_fftSampleRate;
+
+        if (m_fftInBuf) free(m_fftInBuf);
+        m_fftInBuf = static_cast<float*>(malloc(m_fftInBufSize * sizeof(float)));
 
         m_stereoSink.setInput(m_audioStream);
         m_stereoSink.start();
+
+        fftHandlerStart();
 
         return true;
     }
 
     void Processor::deselectStream() {
-        std::lock_guard<std::recursive_mutex> lck(m_recMtx);
+        std::lock_guard<std::mutex> lck(m_mutex);
         m_stereoSink.stop();
+        fftHandlerStop();
         m_audioStream = NULL;
-    }
-
-    ProcessorWorker::~ProcessorWorker() {
-        stop(true);
-    }
-
-    void ProcessorWorker::init(std::shared_ptr<Processor> processor) {
-        m_processor = std::move(processor);
-    }
-
-    void ProcessorWorker::start() {
-        m_shouldRun.store(true);
-        m_thread = std::thread(&ProcessorWorker::process, this);
-    }
-
-    void ProcessorWorker::stop(bool joinThread) {
-        m_shouldRun.store(false);
-        if (joinThread) m_thread.join();
-    }
-
-    /// Process the buffer
-    void ProcessorWorker::process() {
-
-        // Nasty test code, temporary
-
-        float iterator = 1.0f;
-        static float* buf = static_cast<float*>(malloc(4800 * sizeof(float)));
-        while (m_shouldRun.load()) {
-            for (int i = 0; i < 4800; i++) {
-                buf[i] = std::sin(iterator / 100);
-                iterator = iterator * 1.5;
-                if (iterator > 100000) iterator = 1.0f;
-            }
-
-            m_processor->m_ringBufL.push(buf, 4800);
-
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        }
-        free(buf);
     }
 
     ProcessorDisplay::ProcessorDisplay(std::shared_ptr<Processor> processor, uint32_t size) {
@@ -106,7 +131,10 @@ namespace audio_analyzer {
 
     void ProcessorDisplay::draw() {
         if (ImGui::Combo("##_recorder_stream", &m_audioStreamId, m_audioStreams->txt)) {
-            m_processor->setAudioStream(sigpath::sinkManager.bindStream(m_audioStreams->value(m_audioStreamId)));
+            m_processor->setAudioStream(
+                sigpath::sinkManager.bindStream(m_audioStreams->value(m_audioStreamId)),
+                sigpath::sinkManager.getStreamSampleRate(m_audioStreams->name(m_audioStreamId))
+                );
         }
 
         if (ImPlot::BeginAlignedPlots("Signal")) {
@@ -124,10 +152,40 @@ namespace audio_analyzer {
                 ImPlot::EndPlot();
             }
 
+            /*
             if (ImPlot::BeginPlot("Right", ImVec2(-1, ySize / 2.0f))) {
                 ImPlot::SetupAxisLinks(ImAxis_X1, &xRange.Min, &xRange.Max);
                 ImPlot::SetupAxisLinks(ImAxis_Y1, &yRange.Min, &yRange.Max);
                 ImPlot::PlotLine("Right", getBufferRight().get(), bufferSize());
+                ImPlot::EndPlot();
+            }
+            */
+
+            std::vector<float> fftL(m_bufferSize / 2 / 100);
+
+            for (uint32_t i = 0; i < fftL.size(); i++) {
+                fftL[i] = std::abs(m_fftBufferL.get()[i].real());
+            }
+
+            if (ImPlot::BeginPlot("FFT-L", ImVec2(-1, 300))) {
+                ImPlot::SetupAxes(
+                    "Frequency Bin",
+                    "FFT Frame"
+                );
+
+                ImPlot::PlotHeatmap(
+                    "FFT",
+                    fftL.data(),
+                    fftSampleCount_default / 2,
+                    fftL.size() / ( fftSampleCount_default / 2),
+                    0,
+                    1,
+                    "%.1f",
+                    ImPlotPoint(0, 0),
+                    ImPlotPoint(1, 1),
+                    ImPlotHeatmapFlags_ColMajor
+                );
+
                 ImPlot::EndPlot();
             }
 
@@ -138,14 +196,20 @@ namespace audio_analyzer {
     void ProcessorDisplay::resizeBuffers(uint32_t size) {
         if (m_bufferL != nullptr) m_bufferL.reset();
         if (m_bufferR != nullptr) m_bufferR.reset();
+        if (m_fftBufferL != nullptr) m_fftBufferL.reset();
+        if (m_fftBufferR != nullptr) m_fftBufferR.reset();
         m_bufferL = std::shared_ptr<float>(static_cast<float*>(malloc(size * sizeof(float))), free);
         m_bufferR = std::shared_ptr<float>(static_cast<float*>(malloc(size * sizeof(float))), free);
+        m_fftBufferL = std::shared_ptr<std::complex<float>>(static_cast<std::complex<float>*>(malloc(size / 2 * sizeof(std::complex<float>))), free);
+        m_fftBufferR = std::shared_ptr<std::complex<float>>(static_cast<std::complex<float>*>(malloc(size / 2 * sizeof(std::complex<float>))), free);
         m_bufferSize = size;
     }
 
     void ProcessorDisplay::updateBuffers() {
-        m_processor->m_ringBufL.read(m_bufferL.get(), 0, m_bufferSize);
-        m_processor->m_ringBufR.read(m_bufferR.get(), 0, m_bufferSize);
+        m_processor->m_audioRingBufL.read(m_bufferL.get(), 0, m_bufferSize);
+        m_processor->m_audioRingBufR.read(m_bufferR.get(), 0, m_bufferSize);
+        m_processor->m_fftRingBufL.read(m_fftBufferL.get(), 0, m_bufferSize / 2);
+        m_processor->m_fftRingBufR.read(m_fftBufferR.get(), 0, m_bufferSize / 2);
     }
 
     std::shared_ptr<const float> ProcessorDisplay::getBufferLeft() {

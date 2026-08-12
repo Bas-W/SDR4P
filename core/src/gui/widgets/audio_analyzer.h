@@ -9,48 +9,55 @@
 #include <thread>
 #include <vector>
 #include "utils/ring_buffer.h"
+#include "utils/fft.h"
 
 namespace audio_analyzer {
-    constexpr uint32_t fftFreqSamples_default = 1024;
-    constexpr uint32_t fftSamplerate_default = 1024;
-    constexpr uint32_t fftSamplecount_default = 1024;
-
-    static void stereoHandler(dsp::stereo_t* data, int count, void* ctx);
+    constexpr uint32_t fftFreqBinSize_default = 1024;
+    constexpr uint32_t fftSampleCount_default = 2048;
 
     class Processor {
     public:
         Processor();
         ~Processor();
 
+        rbuf::SharedRingBuffer<float> m_audioRingBufL;
+        rbuf::SharedRingBuffer<float> m_audioRingBufR;
+
+        rbuf::SharedRingBuffer<std::complex<float>> m_fftRingBufL;
+        rbuf::SharedRingBuffer<std::complex<float>> m_fftRingBufR;
+
         void resizeBuffers(uint32_t size);
 
-        rbuf::SharedRingBuffer m_ringBufL;
-        rbuf::SharedRingBuffer m_ringBufR;
-
-        bool setAudioStream(dsp::stream<dsp::stereo_t>* stream);
+        bool setAudioStream(dsp::stream<dsp::stereo_t>* stream, uint32_t streamRate);
         void deselectStream();
     private:
-        std::recursive_mutex m_recMtx;
+        std::mutex m_mutex;
+        std::mutex m_fftHandlerMutex;
+
+        std::atomic<bool> m_fftHandlerShouldRun;
+        std::condition_variable m_signalProcessFft;
+        std::atomic<uint32_t> m_newSamples;
+        std::thread m_fftHandlerThread;
+
+        uint32_t m_fftFreqBinSize;
+        uint32_t m_fftSampleRate;
+        uint32_t m_fftSampleCount;
+
+        uint32_t m_streamRate;
+
+        uint32_t m_fftInBufSize;
+        float* m_fftInBuf = nullptr;
+        std::complex<float>* m_fftOutBufComplex = nullptr;
 
         dsp::stream<dsp::stereo_t>* m_audioStream = nullptr;
         dsp::sink::Handler<dsp::stereo_t> m_stereoSink;
-    };
 
-    class ProcessorWorker {
-    public:
-        ~ProcessorWorker();
+        static void stereoHandler(dsp::stereo_t* data, int count, void* ctx);
+        void fftHandler();
+        bool processFft();
 
-        void init(std::shared_ptr<Processor> processor);
-
-        void start();
-        void stop(bool joinThread = true);
-
-    private:
-        std::atomic<bool> m_shouldRun = false;
-        std::thread m_thread;
-        std::shared_ptr<Processor> m_processor;
-
-        void process();
+        void fftHandlerStart();
+        void fftHandlerStop();
     };
 
     class ProcessorDisplay {
@@ -73,6 +80,8 @@ namespace audio_analyzer {
         std::shared_ptr<Processor> m_processor;
         std::shared_ptr<float> m_bufferL;
         std::shared_ptr<float> m_bufferR;
+        std::shared_ptr<std::complex<float>> m_fftBufferL;
+        std::shared_ptr<std::complex<float>> m_fftBufferR;
 
         std::shared_ptr<OptionList<std::string, std::string>> m_audioStreams;
         int m_audioStreamId = 0;
@@ -82,6 +91,7 @@ namespace audio_analyzer {
     public:
         AudioAnalyzer();
 
+        void init(uint32_t fftSize = fftFreqBinSize_default);
         void doPostInit();
 
         void addProcessorDisplay();
