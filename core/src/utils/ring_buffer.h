@@ -23,6 +23,7 @@ namespace rbuf {
             ZoneScoped;
             std::lock_guard<std::mutex> lck(m_mutex);
 
+            if (m_buf) m_buf.reset();
             m_writeIdx = 0;
             m_size = size;
             m_buf = std::shared_ptr<T>(static_cast<T*>(std::malloc(size * sizeof(T))), free);

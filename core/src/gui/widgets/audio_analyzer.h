@@ -68,18 +68,13 @@ namespace audio_analyzer {
         void setAudioStream(std::string streamName);
         void unsetAudioStream();
 
-        size_t displayBufSize();
-
         void setMono(bool mono);
         bool isMono();
-
-        bool readDisplayBufL(float* dest, size_t count);
-        bool readDisplayBufR(float* dest, size_t count);
 
         void draw();
     private:
         std::mutex m_mutex;
-        std::mutex m_displayBufMtx;
+        std::mutex m_displayBufMutex;
 
         bool m_mono = true;
         size_t m_displayBufSize = 0;
@@ -100,8 +95,9 @@ namespace audio_analyzer {
         std::shared_ptr<Processor> m_processorL;
         std::shared_ptr<Processor> m_processorR;
 
-        float* m_displayBufL = nullptr;
-        float* m_displayBufR = nullptr;
+        rbuf::SharedRingBuffer<float> m_displayRingBufL;
+        rbuf::SharedRingBuffer<float> m_displayRingBufR;
+        float* m_displayBuf = nullptr;
 
         static void audioHandler(dsp::stereo_t* data, int count, void* ctx);
         static void streamRegisteredHandler(std::string name, void* ctx);

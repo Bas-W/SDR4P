@@ -44,30 +44,32 @@ namespace audio_analyzer {
     }
 
     void Analyzer::initDisplayBuffers(size_t size) {
-        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
+        std::lock_guard<std::mutex> lock(m_mutex);
+        std::lock_guard<std::mutex> lockDispBuf(m_displayBufMutex);
 
         m_displayBufSize = size;
 
-        if (m_displayBufL) {
-            free(m_displayBufL);
-        }
-        m_displayBufL = static_cast<float*>(malloc(size * sizeof(float)));
+        m_displayRingBufL.init(size);
 
         if (!m_mono) {
-            if (m_displayBufR) {
-                free(m_displayBufR);
-            }
-            m_displayBufR = static_cast<float*>(malloc(size * sizeof(float)));
+            m_displayRingBufR.init(size);
+        } else {
+            m_displayRingBufR.freeBuf();
         }
+
+        if (m_displayBuf) free(m_displayBuf);
+        m_displayBuf = static_cast<float*>(malloc(m_displayBufSize * sizeof(float)));
     }
 
     void Analyzer::freeDisplayBuffers() {
-        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
-
-        if (m_displayBufL) free(m_displayBufL);
-        if (m_displayBufR) free(m_displayBufR);
+        std::lock_guard<std::mutex> lock(m_mutex);
+        std::lock_guard<std::mutex> lockDispBuf(m_displayBufMutex);
 
         m_displayBufSize = 0;
+
+        m_displayRingBufL.freeBuf();
+        m_displayRingBufR.freeBuf();
+        if (m_displayBuf) free(m_displayBuf);
     }
 
     void Analyzer::start() {
@@ -138,11 +140,6 @@ namespace audio_analyzer {
         m_audioStream = nullptr;
     }
 
-    size_t Analyzer::displayBufSize() {
-        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
-        return m_displayBufSize;
-    }
-
     void Analyzer::setMono(bool mono) {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_mono = mono;
@@ -151,32 +148,6 @@ namespace audio_analyzer {
     bool Analyzer::isMono() {
         std::lock_guard<std::mutex> lock(m_mutex);
         return m_mono;
-    }
-
-    bool Analyzer::readDisplayBufL(float* dest, size_t count) {
-        ZoneScoped;
-        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
-
-        if (count > m_displayBufSize) return false;
-
-        if (m_displayBufL == nullptr) return false;
-
-        std::memcpy(dest, m_displayBufL, count * sizeof(float));
-
-        return true;
-    }
-
-    bool Analyzer::readDisplayBufR(float* dest, size_t count) {
-        ZoneScoped;
-        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
-
-        if (count > m_displayBufSize) return false;
-
-        if (m_displayBufR == nullptr) return false;
-
-        std::memcpy(dest, m_displayBufR, count * sizeof(float));
-
-        return true;
     }
 
     void Analyzer::draw() {
@@ -194,13 +165,13 @@ namespace audio_analyzer {
 
         if (ImGui::BeginChild("##analyzer_disp")) {
             if (displayBufSize > 0) {
+                std::lock_guard<std::mutex> lockDispBuf(m_displayBufMutex);
+
                 if (ImPlot::BeginPlot(isMono ? "Waveform" : "Waveform Left")) {
 
-                    float* data = static_cast<float*>(malloc(displayBufSize * sizeof(float)));
+                    m_displayRingBufL.read(m_displayBuf, 0, displayBufSize);
 
-                    readDisplayBufL(data, displayBufSize);
-
-                    ImPlot::PlotLine("##analyzer_plot_waveform", data, displayBufSize);
+                    ImPlot::PlotLine("##analyzer_plot_waveform", m_displayBuf, displayBufSize);
 
                     ImPlot::EndPlot();
                 }
@@ -208,11 +179,9 @@ namespace audio_analyzer {
                 if (!isMono) {
                     if (ImPlot::BeginPlot("Waveform Right")) {
 
-                        float* data = static_cast<float*>(malloc(displayBufSize * sizeof(float)));
+                        m_displayRingBufR.read(m_displayBuf, 0, displayBufSize);
 
-                        readDisplayBufR(data, displayBufSize);
-
-                        ImPlot::PlotLine("##analyzer_plot_waveform", data, displayBufSize);
+                        ImPlot::PlotLine("##analyzer_plot_waveform", m_displayBuf, displayBufSize);
 
                         ImPlot::EndPlot();
                     }
@@ -231,69 +200,50 @@ namespace audio_analyzer {
 
         std::lock_guard<std::mutex> lock(_this->m_mutex);
 
-        if (_this->m_mono && _this->m_processorL) {
-            size_t countToCpy = 0;
+        size_t tempBufSize = std::min(_this->m_displayBufSize, static_cast<size_t>(count));
+
+        if (_this->m_mono) {
             dsp::complex_t* out = _this->m_outStreamL.writeBuf;
-
-            std::lock_guard<std::mutex> lockDisp(_this->m_displayBufMtx);
-
-            if (_this->m_displayBufL && count < _this->m_displayBufSize) {
-                countToCpy = _this->m_displayBufSize - count;
-
-                float* temp = static_cast<float*>(malloc(countToCpy * sizeof(float)));
-
-                std::memcpy(temp, _this->m_displayBufL, countToCpy * sizeof(float));
-                std::memcpy(_this->m_displayBufL + count, temp,countToCpy * sizeof(float));
-
-                free(temp);
-            }
+            float* temp = static_cast<float*>(malloc(tempBufSize * sizeof(float)));
 
             for (int i = 0; i < count; i++) {
                 float re = (data[i].l + data[i].r) / 2.0f;
                 out[i] = dsp::complex_t{ re, 0.0f };
-                if (_this->m_displayBufL && i < _this->m_displayBufSize) {
-                    _this->m_displayBufL[count - i - 1] = re;
+                if (i < tempBufSize) {
+                    temp[i] = re;
                 }
             }
+
+            _this->m_displayRingBufL.push(temp, tempBufSize);
+
+            free(temp);
 
             //if (!_this->m_outStreamL.swap(count)) flog::error("audio_analyzer failed to write data to outStreamL");
 
             return;
-        }
-
-        if (_this->m_processorL && _this->m_processorR) {
-            size_t countToCpy = 0;
+        } else {
             dsp::complex_t* outL = _this->m_outStreamL.writeBuf;
             dsp::complex_t* outR = _this->m_outStreamR.writeBuf;
-
-            std::lock_guard<std::mutex> lockDisp(_this->m_displayBufMtx);
-
-            if (_this->m_displayBufL && _this->m_displayBufR && count < _this->m_displayBufSize) {
-                countToCpy = _this->m_displayBufSize - count;
-
-                float* temp = static_cast<float*>(malloc(countToCpy * sizeof(float)));
-
-                std::memcpy(temp, _this->m_displayBufL, countToCpy * sizeof(float));
-                std::memcpy(_this->m_displayBufL + count, temp,countToCpy * sizeof(float));
-
-                std::memcpy(temp, _this->m_displayBufR, countToCpy);
-                std::memcpy(_this->m_displayBufR + count, temp,countToCpy * sizeof(float));
-
-                free(temp);
-            }
+            float* tempL = static_cast<float*>(malloc(tempBufSize * sizeof(float)));
+            float* tempR = static_cast<float*>(malloc(tempBufSize * sizeof(float)));
 
             for (int i = 0; i < count; i++) {
                 outL[i] = dsp::complex_t{ data[i].l, 0.0f };
                 outR[i] = dsp::complex_t{ data[i].r, 0.0f };
-
-                if (_this->m_displayBufL && _this->m_displayBufR && i < _this->m_displayBufSize) {
-                    _this->m_displayBufL[count - i - 1] = data[i].l;
-                    _this->m_displayBufR[count - i - 1] = data[i].r;
+                if (i < tempBufSize) {
+                    tempL[i] = data[i].l;
+                    tempR[i] = data[i].r;
                 }
             }
 
+            _this->m_displayRingBufL.push(tempL, tempBufSize);
+            _this->m_displayRingBufR.push(tempR, tempBufSize);
+
+            free(tempL);
+            free(tempR);
+
             //if (!_this->m_outStreamL.swap(count)) flog::error("audio_analyzer failed to write data to outStreamL");
-            //if (!_this->m_outStreamR.swap(count)) flog::error("audio_analyzer failed to write data to outStreamR");
+
             return;
         }
 
