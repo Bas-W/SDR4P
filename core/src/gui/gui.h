@@ -14,7 +14,7 @@ namespace gui {
     SDRPP_EXPORT Menu menu;
     SDRPP_EXPORT ThemeManager themeManager;
     SDRPP_EXPORT MainWindow mainWindow;
-    SDRPP_EXPORT audio_analyzer::AudioAnalyzer audioAnalyzer;
+    SDRPP_EXPORT audio_analyzer::Manager audioAnalyzer;
 
     void selectSource(std::string name);
 };

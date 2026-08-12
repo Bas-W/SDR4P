@@ -1,262 +1,359 @@
 #include "audio_analyzer.h"
 
-#include <cmath>
-#include <cstdlib>
-#include <utility>
-#include "Tracy.hpp"
 #include "imgui.h"
 #include "implot.h"
 #include "signal_path/signal_path.h"
-#include "utils/flog.h"
 
 namespace audio_analyzer {
-    void Processor::stereoHandler(dsp::stereo_t* data, int count, void* ctx) {
-        Processor* _this = static_cast<Processor*>(ctx);
-        if (_this->m_audioRingBufL.getSize() > 0 && _this->m_audioRingBufR.getSize() > 0) {
-            _this->m_audioRingBufL.push(&data->l, count);
-            _this->m_audioRingBufR.push(&data->r, count);
-            _this->m_newSamples += count;
-            _this->m_signalProcessFft.notify_one();
-        }
-    }
-
-    void Processor::fftHandler() {
-        while (m_fftHandlerShouldRun.load()) {
-            std::unique_lock<std::mutex> lock(m_fftHandlerMutex);
-            m_signalProcessFft.wait_for(lock, std::chrono::milliseconds(10), [this] {return m_newSamples.load() > m_fftSampleCount;});
-            processFft();
-        }
-    }
-
-    bool Processor::processFft() {
-        if (m_newSamples < m_fftSampleCount) return false;
-
-        while (m_newSamples >= m_fftSampleCount) {
-            m_audioRingBufL.read(m_fftInBuf, m_audioRingBufL.getSize() - m_newSamples, m_fftSampleCount);
-            fft::calcFft(m_fftInBuf, m_fftOutBufComplex, m_fftSampleCount);
-            m_fftRingBufL.push(m_fftOutBufComplex, m_fftSampleCount / 2);
-
-            m_audioRingBufR.read(m_fftInBuf, m_audioRingBufR.getSize() - m_newSamples, m_fftSampleCount);
-            fft::calcFft(m_fftInBuf, m_fftOutBufComplex, m_fftSampleCount);
-            m_fftRingBufR.push(m_fftOutBufComplex, m_fftSampleCount / 2);
-
-            m_newSamples -= m_fftSampleCount;
-
-            flog::debug("fft calculated");
-        }
-
-        return true;
-    }
-
-    void Processor::fftHandlerStart() {
-        if (m_fftHandlerShouldRun.load() && m_fftHandlerThread.joinable()) return;
-        m_fftHandlerShouldRun = true;
-        m_fftHandlerThread = std::thread([this] {this->fftHandler();});
-    }
-
-    void Processor::fftHandlerStop() {
-        m_fftHandlerShouldRun = false;
-        if (m_fftHandlerThread.joinable()) m_fftHandlerThread.join();
-    }
-
-    Processor::Processor() {
-        m_fftHandlerShouldRun = false;
-
-        m_newSamples = 0;
-        m_fftFreqBinSize = fftFreqBinSize_default;
-        m_fftSampleCount = fftSampleCount_default;
-        m_stereoSink.init(m_audioStream, stereoHandler, this);
-
-        m_fftInBuf = static_cast<float*>(malloc(m_fftSampleCount * sizeof(float)));
-        m_fftOutBufComplex = static_cast<std::complex<float>*>(malloc(m_fftSampleCount / 2 * sizeof(std::complex<float>)));
-    }
-
     Processor::~Processor() {
-        m_stereoSink.stop();
-        free(m_fftInBuf);
+        return;
     }
 
-    void Processor::resizeBuffers(uint32_t size) {
-        std::lock_guard<std::mutex> lck(m_mutex);
-
-        m_audioRingBufL.freeBuf();
-        m_audioRingBufR.freeBuf();
-        m_fftRingBufL.freeBuf();
-        m_fftRingBufR.freeBuf();
-
-        m_audioRingBufL.init(size);
-        m_audioRingBufR.init(size);
-        m_fftRingBufL.init(size / 2.0f);
-        m_fftRingBufR.init(size / 2.0f);
+    void Processor::init(dsp::stream<dsp::complex_t>* in, double sampleRate, int decimationRatio, bool dcBlocking, int fftSize, double fftRate) {
+        return;
     }
 
-    bool Processor::setAudioStream(dsp::stream<dsp::stereo_t>* stream, uint32_t streamRate) {
-        if (!stream || streamRate == 0) return false;
-
-        deselectStream();
-
-        std::lock_guard<std::mutex> lck(m_mutex);
-
-        m_audioStream = stream;
-        m_streamRate = streamRate;
-
-        m_fftInBufSize = m_streamRate / m_fftSampleRate;
-
-        if (m_fftInBuf) free(m_fftInBuf);
-        m_fftInBuf = static_cast<float*>(malloc(m_fftInBufSize * sizeof(float)));
-
-        m_stereoSink.setInput(m_audioStream);
-        m_stereoSink.start();
-
-        fftHandlerStart();
-
-        return true;
+    void Processor::setSampleRate(double sampleRate) {
+        return;
     }
 
-    void Processor::deselectStream() {
-        std::lock_guard<std::mutex> lck(m_mutex);
-        m_stereoSink.stop();
-        fftHandlerStop();
-        m_audioStream = NULL;
+    Analyzer::Analyzer() {
+        m_audioSink.init(&m_dummyStream, audioHandler, this);
     }
 
-    ProcessorDisplay::ProcessorDisplay(std::shared_ptr<Processor> processor, uint32_t size) {
-        m_processor = std::move(processor);
-        resizeBuffers(size);
+    Analyzer::~Analyzer() {
+        stop();
+        freeDisplayBuffers();
     }
 
-    void ProcessorDisplay::setAudioStreams(std::shared_ptr<OptionList<std::string, std::string>> audioStreams) {
-        m_audioStreams = audioStreams;
-    }
+    void Analyzer::init() {
+        std::lock_guard<std::mutex> lock(m_mutex);
 
-    void ProcessorDisplay::draw() {
-        if (ImGui::Combo("##_recorder_stream", &m_audioStreamId, m_audioStreams->txt)) {
-            m_processor->setAudioStream(
-                sigpath::sinkManager.bindStream(m_audioStreams->value(m_audioStreamId)),
-                sigpath::sinkManager.getStreamSampleRate(m_audioStreams->name(m_audioStreamId))
-                );
-        }
-
-        if (ImPlot::BeginAlignedPlots("Signal")) {
-            static ImPlotRange xRange{0.0, static_cast<double>(bufferSize())};
-            static ImPlotRange yRange{-1.0, 1.0};
-
-            updateBuffers();
-
-            float ySize = ImGui::GetContentRegionAvail().y;
-
-            if (ImPlot::BeginPlot("Left", ImVec2(-1, ySize / 2.0f))) {
-                ImPlot::SetupAxisLinks(ImAxis_X1, &xRange.Min, &xRange.Max);
-                ImPlot::SetupAxisLinks(ImAxis_Y1, &yRange.Min, &yRange.Max);
-                ImPlot::PlotLine("Left", getBufferLeft().get(), bufferSize());
-                ImPlot::EndPlot();
-            }
-
-            /*
-            if (ImPlot::BeginPlot("Right", ImVec2(-1, ySize / 2.0f))) {
-                ImPlot::SetupAxisLinks(ImAxis_X1, &xRange.Min, &xRange.Max);
-                ImPlot::SetupAxisLinks(ImAxis_Y1, &yRange.Min, &yRange.Max);
-                ImPlot::PlotLine("Right", getBufferRight().get(), bufferSize());
-                ImPlot::EndPlot();
-            }
-            */
-
-            std::vector<float> fftL(m_bufferSize / 2 / 100);
-
-            for (uint32_t i = 0; i < fftL.size(); i++) {
-                fftL[i] = std::abs(m_fftBufferL.get()[i].real());
-            }
-
-            if (ImPlot::BeginPlot("FFT-L", ImVec2(-1, 300))) {
-                ImPlot::SetupAxes(
-                    "Frequency Bin",
-                    "FFT Frame"
-                );
-
-                ImPlot::PlotHeatmap(
-                    "FFT",
-                    fftL.data(),
-                    fftSampleCount_default / 2,
-                    fftL.size() / ( fftSampleCount_default / 2),
-                    0,
-                    1,
-                    "%.1f",
-                    ImPlotPoint(0, 0),
-                    ImPlotPoint(1, 1),
-                    ImPlotHeatmapFlags_ColMajor
-                );
-
-                ImPlot::EndPlot();
-            }
-
-            ImPlot::EndAlignedPlots();
-        }
-    }
-
-    void ProcessorDisplay::resizeBuffers(uint32_t size) {
-        if (m_bufferL != nullptr) m_bufferL.reset();
-        if (m_bufferR != nullptr) m_bufferR.reset();
-        if (m_fftBufferL != nullptr) m_fftBufferL.reset();
-        if (m_fftBufferR != nullptr) m_fftBufferR.reset();
-        m_bufferL = std::shared_ptr<float>(static_cast<float*>(malloc(size * sizeof(float))), free);
-        m_bufferR = std::shared_ptr<float>(static_cast<float*>(malloc(size * sizeof(float))), free);
-        m_fftBufferL = std::shared_ptr<std::complex<float>>(static_cast<std::complex<float>*>(malloc(size / 2 * sizeof(std::complex<float>))), free);
-        m_fftBufferR = std::shared_ptr<std::complex<float>>(static_cast<std::complex<float>*>(malloc(size / 2 * sizeof(std::complex<float>))), free);
-        m_bufferSize = size;
-    }
-
-    void ProcessorDisplay::updateBuffers() {
-        m_processor->m_audioRingBufL.read(m_bufferL.get(), 0, m_bufferSize);
-        m_processor->m_audioRingBufR.read(m_bufferR.get(), 0, m_bufferSize);
-        m_processor->m_fftRingBufL.read(m_fftBufferL.get(), 0, m_bufferSize / 2);
-        m_processor->m_fftRingBufR.read(m_fftBufferR.get(), 0, m_bufferSize / 2);
-    }
-
-    std::shared_ptr<const float> ProcessorDisplay::getBufferLeft() {
-        return m_bufferL;
-    }
-    std::shared_ptr<const float> ProcessorDisplay::getBufferRight() {
-        return m_bufferR;
-    }
-
-    const uint32_t ProcessorDisplay::bufferSize() {
-        return m_bufferSize;
-    }
-
-    AudioAnalyzer::AudioAnalyzer() {
-        m_audioStreams = std::make_shared<OptionList<std::string, std::string>>();
-    }
-
-    void AudioAnalyzer::doPostInit() {
-        m_audioStreams->clear();
+        m_audioStreams.clear();
         auto names = sigpath::sinkManager.getStreamNames();
         for (const auto& name : names) {
-            m_audioStreams->define(name, name, name);
+            m_audioStreams.define(name, name, name);
+        }
+
+        m_onStreamRegisteredHandler.ctx = this;
+        m_onStreamRegisteredHandler.handler = streamRegisteredHandler;
+        sigpath::sinkManager.onStreamRegistered.bindHandler(&m_onStreamRegisteredHandler);
+        m_onStreamUnregisteredHandler.ctx = this;
+        m_onStreamUnregisteredHandler.handler = streamUnregisteredHandler;
+        sigpath::sinkManager.onStreamUnregister.bindHandler(&m_onStreamUnregisteredHandler);
+    }
+
+    void Analyzer::initDisplayBuffers(size_t size) {
+        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
+
+        m_displayBufSize = size;
+
+        if (m_displayBufL) {
+            free(m_displayBufL);
+        }
+        m_displayBufL = static_cast<float*>(malloc(size * sizeof(float)));
+
+        if (!m_mono) {
+            if (m_displayBufR) {
+                free(m_displayBufR);
+            }
+            m_displayBufR = static_cast<float*>(malloc(size * sizeof(float)));
         }
     }
 
-    void AudioAnalyzer::addProcessorDisplay() {
-        std::shared_ptr<audio_analyzer::Processor> processor = std::make_shared<audio_analyzer::Processor>();
-        processor->resizeBuffers(480000);
+    void Analyzer::freeDisplayBuffers() {
+        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
 
-        std::shared_ptr<audio_analyzer::ProcessorDisplay> processorDisplay = std::make_shared<audio_analyzer::ProcessorDisplay>(processor, 480000);
+        if (m_displayBufL) free(m_displayBufL);
+        if (m_displayBufR) free(m_displayBufR);
 
-        processorDisplay->setAudioStreams(m_audioStreams);
-        m_processorDisplays.push_back(processorDisplay);
+        m_displayBufSize = 0;
     }
 
-    void AudioAnalyzer::draw() {
-        ZoneScoped;
-        if (ImGui::BeginChild("##srdpp_audioAnalyzer")) {
-            if (ImGui::Button("Add")) {
-                addProcessorDisplay();
+    void Analyzer::start() {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        m_audioSink.start();
+    }
+
+    void Analyzer::stop() {
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        m_audioSink.stop();
+    }
+
+    /// Doesn't lock mutex automatically
+    void Analyzer::setAudioStream(std::string streamName) {
+        //@todo: Add ability to update settings of existing processor
+        m_audioSink.tempStop();
+
+        unsetAudioStream();
+
+        if (m_audioStreams.empty()) {
+            m_audioStreamName.clear();
+            return;
+        }
+
+        if (!m_audioStreams.keyExists(streamName)) {
+            m_audioStreamName.clear();
+            return;
+        }
+
+        m_audioStream = sigpath::sinkManager.bindStream(streamName);
+        if (!m_audioStream) return;
+
+        m_audioStreamName = streamName;
+        m_audioStreamId = m_audioStreams.keyId(streamName);
+        m_sampleRate = sigpath::sinkManager.getStreamSampleRate(streamName);
+
+        if (!m_processorL) {
+            m_processorL = std::make_unique<Processor>();
+            m_processorL->init(&m_outStreamL, m_sampleRate, 1, false, fftFreqBinSize_default, 10);
+        }
+        else {
+            m_processorL->setSampleRate(m_sampleRate);
+        }
+
+        if (!m_mono) {
+            if (!m_processorR) {
+                m_processorR = std::make_unique<Processor>();
+                m_processorR->init(&m_outStreamR, m_sampleRate, 1, false, fftFreqBinSize_default, 10);
             }
-            for (int i = 0; i < m_processorDisplays.size(); i++) {
-                ImGui::BeginChild(("##audioAnalyzer_processor_" + std::to_string(i)).c_str());
-                m_processorDisplays[i]->draw();
-                ImGui::EndChild();
+            else {
+                m_processorR->setSampleRate(m_sampleRate);
+            }
+        }
+
+        m_audioSink.setInput(m_audioStream);
+        m_audioSink.tempStart();
+    }
+
+    /// Doesn't lock mutex automatically
+    void Analyzer::unsetAudioStream() {
+        if (m_audioStreamName.empty() || !m_audioStream) {
+            return;
+        }
+        sigpath::sinkManager.unbindStream(m_audioStreamName, m_audioStream);
+        m_audioStreamName.clear();
+        m_audioStream = nullptr;
+    }
+
+    size_t Analyzer::displayBufSize() {
+        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
+        return m_displayBufSize;
+    }
+
+    void Analyzer::setMono(bool mono) {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_mono = mono;
+    }
+
+    bool Analyzer::isMono() {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        return m_mono;
+    }
+
+    bool Analyzer::readDisplayBufL(float* dest, size_t count) {
+        ZoneScoped;
+        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
+
+        if (count > m_displayBufSize) return false;
+
+        if (m_displayBufL == nullptr) return false;
+
+        std::memcpy(dest, m_displayBufL, count * sizeof(float));
+
+        return true;
+    }
+
+    bool Analyzer::readDisplayBufR(float* dest, size_t count) {
+        ZoneScoped;
+        std::lock_guard<std::mutex> lockDisp(m_displayBufMtx);
+
+        if (count > m_displayBufSize) return false;
+
+        if (m_displayBufR == nullptr) return false;
+
+        std::memcpy(dest, m_displayBufR, count * sizeof(float));
+
+        return true;
+    }
+
+    void Analyzer::draw() {
+        ZoneScoped;
+        std::unique_lock<std::mutex> lock(m_mutex);
+
+        bool isMono = m_mono;
+        size_t displayBufSize = m_displayBufSize;
+
+        if (ImGui::Combo(("##_recorder_stream_" + m_audioStreamName).c_str(), &m_audioStreamId, m_audioStreams.txt)) {
+            setAudioStream(m_audioStreams.value(m_audioStreamId));
+        }
+
+        lock.unlock();
+
+        if (ImGui::BeginChild("##analyzer_disp")) {
+            if (displayBufSize > 0) {
+                if (ImPlot::BeginPlot(isMono ? "Waveform" : "Waveform Left")) {
+
+                    float* data = static_cast<float*>(malloc(displayBufSize * sizeof(float)));
+
+                    readDisplayBufL(data, displayBufSize);
+
+                    ImPlot::PlotLine("##analyzer_plot_waveform", data, displayBufSize);
+
+                    ImPlot::EndPlot();
+                }
+
+                if (!isMono) {
+                    if (ImPlot::BeginPlot("Waveform Right")) {
+
+                        float* data = static_cast<float*>(malloc(displayBufSize * sizeof(float)));
+
+                        readDisplayBufR(data, displayBufSize);
+
+                        ImPlot::PlotLine("##analyzer_plot_waveform", data, displayBufSize);
+
+                        ImPlot::EndPlot();
+                    }
+                }
+            }
+            else {
+                ImGui::Text("no data");
             }
         }
         ImGui::EndChild();
+    }
+
+    void Analyzer::audioHandler(dsp::stereo_t* data, int count, void* ctx) {
+        ZoneScoped;
+        Analyzer* _this = static_cast<Analyzer*>(ctx);
+
+        std::lock_guard<std::mutex> lock(_this->m_mutex);
+
+        if (_this->m_mono && _this->m_processorL) {
+            size_t countToCpy = 0;
+            dsp::complex_t* out = _this->m_outStreamL.writeBuf;
+
+            std::lock_guard<std::mutex> lockDisp(_this->m_displayBufMtx);
+
+            if (_this->m_displayBufL && count < _this->m_displayBufSize) {
+                countToCpy = _this->m_displayBufSize - count;
+
+                float* temp = static_cast<float*>(malloc(countToCpy * sizeof(float)));
+
+                std::memcpy(temp, _this->m_displayBufL, countToCpy * sizeof(float));
+                std::memcpy(_this->m_displayBufL + count, temp,countToCpy * sizeof(float));
+
+                free(temp);
+            }
+
+            for (int i = 0; i < count; i++) {
+                float re = (data[i].l + data[i].r) / 2.0f;
+                out[i] = dsp::complex_t{ re, 0.0f };
+                if (_this->m_displayBufL && i < _this->m_displayBufSize) {
+                    _this->m_displayBufL[count - i - 1] = re;
+                }
+            }
+
+            //if (!_this->m_outStreamL.swap(count)) flog::error("audio_analyzer failed to write data to outStreamL");
+
+            return;
+        }
+
+        if (_this->m_processorL && _this->m_processorR) {
+            size_t countToCpy = 0;
+            dsp::complex_t* outL = _this->m_outStreamL.writeBuf;
+            dsp::complex_t* outR = _this->m_outStreamR.writeBuf;
+
+            std::lock_guard<std::mutex> lockDisp(_this->m_displayBufMtx);
+
+            if (_this->m_displayBufL && _this->m_displayBufR && count < _this->m_displayBufSize) {
+                countToCpy = _this->m_displayBufSize - count;
+
+                float* temp = static_cast<float*>(malloc(countToCpy * sizeof(float)));
+
+                std::memcpy(temp, _this->m_displayBufL, countToCpy * sizeof(float));
+                std::memcpy(_this->m_displayBufL + count, temp,countToCpy * sizeof(float));
+
+                std::memcpy(temp, _this->m_displayBufR, countToCpy);
+                std::memcpy(_this->m_displayBufR + count, temp,countToCpy * sizeof(float));
+
+                free(temp);
+            }
+
+            for (int i = 0; i < count; i++) {
+                outL[i] = dsp::complex_t{ data[i].l, 0.0f };
+                outR[i] = dsp::complex_t{ data[i].r, 0.0f };
+
+                if (_this->m_displayBufL && _this->m_displayBufR && i < _this->m_displayBufSize) {
+                    _this->m_displayBufL[count - i - 1] = data[i].l;
+                    _this->m_displayBufR[count - i - 1] = data[i].r;
+                }
+            }
+
+            //if (!_this->m_outStreamL.swap(count)) flog::error("audio_analyzer failed to write data to outStreamL");
+            //if (!_this->m_outStreamR.swap(count)) flog::error("audio_analyzer failed to write data to outStreamR");
+            return;
+        }
+
+        flog::error("audio_analyzer failed; processors are nullptr");
+    }
+
+    void Analyzer::streamRegisteredHandler(std::string name, void* ctx) {
+        Analyzer* _this = static_cast<Analyzer*>(ctx);
+
+        // Add new stream to the list
+        _this->m_audioStreams.define(name, name, name);
+
+        // If no stream is selected, select new stream. If not, update the menu ID.
+        if (_this->m_audioStreamName.empty()) {
+            _this->setAudioStream(name);
+        }
+        else {
+            _this->m_audioStreamId = _this->m_audioStreams.keyId(_this->m_audioStreamName);
+        }
+    }
+
+    void Analyzer::streamUnregisteredHandler(std::string name, void* ctx) {
+        Analyzer* _this = static_cast<Analyzer*>(ctx);
+
+        _this->m_audioStreams.undefineKey(name);
+
+        // If the stream is in use, deselect it and reselect default. Otherwise, update ID.
+        if (_this->m_audioStreamName == name) {
+            _this->setAudioStream("");
+        }
+        else {
+            _this->m_audioStreamId = _this->m_audioStreams.keyId(_this->m_audioStreamName);
+        }
+    }
+
+    void Manager::doPostInit() {
+        return;
+    }
+
+    void Manager::addAnalyzer() {
+        std::shared_ptr<Analyzer> analyzer = std::make_shared<Analyzer>();
+        analyzer->init();
+        analyzer->initDisplayBuffers(240000);
+        analyzer->start();
+        m_analyzers.push_back(analyzer);
+    }
+
+    void Manager::draw() {
+        ZoneScoped;
+        if (ImGui::BeginChild("Audio Analyzer")) {
+
+            if (ImGui::Button("Add Analyzer")) {
+                addAnalyzer();
+            }
+
+            for (int i = 0; i < m_analyzers.size(); i++) {
+                m_analyzers.at(i)->draw();
+            }
+
+            ImGui::EndChild();
+        }
     }
 }
