@@ -41,6 +41,8 @@ namespace rbuf {
             ZoneScoped;
             std::lock_guard<std::mutex> lck(m_mutex);
 
+            if (m_size < 1) return;
+
             if (m_writeIdx + count <= m_size) {
                 std::memcpy(m_buf.get() + m_writeIdx, data, count * sizeof(T));
                 m_writeIdx += count;
@@ -61,6 +63,8 @@ namespace rbuf {
         void read(T* dest, uint32_t offset, uint32_t count) {
             ZoneScoped;
             std::lock_guard<std::mutex> lck(m_mutex);
+
+            if (m_size < 1) return;
 
             uint32_t idxToRead = (m_hasWrapped ? m_writeIdx : 0) + offset % m_size;
             if (idxToRead + count <= m_size) {
