@@ -321,7 +321,7 @@ namespace audio_analyzer {
         m_sampleRate = sigpath::sinkManager.getStreamSampleRate(streamName);
 
         if (!m_processorL) {
-            m_processorL = std::make_shared<Processor>();
+            m_processorL = std::make_unique<Processor>();
             m_processorL->init(&m_outStreamL, m_sampleRate, 1, false, fftFreqBinSize_default, fftFreqRate_default, fftHandlerL, this);
             m_processorL->start();
         }
@@ -332,7 +332,7 @@ namespace audio_analyzer {
 
         if (!m_mono) {
             if (!m_processorR) {
-                m_processorR = std::make_shared<Processor>();
+                m_processorR = std::make_unique<Processor>();
                 m_processorR->init(&m_outStreamR, m_sampleRate, 1, false, fftFreqBinSize_default, fftFreqRate_default, fftHandlerR, this);
                 m_processorR->start();
             }
@@ -377,8 +377,6 @@ namespace audio_analyzer {
         size_t waterfallFreqBinCount = m_waterfallBinCount;
         int fftSize = m_fftSize;
         uint64_t sampleRate = m_sampleRate;
-        std::shared_ptr<Processor> processorL = m_processorL;
-        std::shared_ptr<Processor> processorR = m_processorR;
 
         if (ImGui::Combo(("##_recorder_stream_" + m_audioStreamName).c_str(), &m_audioStreamId, m_audioStreams.txt)) {
             setAudioStream(m_audioStreams.value(m_audioStreamId));
@@ -415,10 +413,10 @@ namespace audio_analyzer {
                         ImPlot::EndPlot();
                     }
 
-                    if (m_fftDisplayBuf && processorL) {
+                    if (m_fftDisplayBuf && m_processorL) {
                         if (ImPlot::BeginPlot("Spectrum", ImVec2(-1.0f, spectrumHeight))) {
                             int usefulBins = fftSize / 2;
-                            processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
+                            m_processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
 
                             double binHz = static_cast<double>(sampleRate) / static_cast<double>(fftSize);
 
@@ -432,8 +430,8 @@ namespace audio_analyzer {
 
                             ImPlot::PlotLine(isMono ? "Mono##analyzer_plot_fft_l" : "Left##analyzer_plot_fft_l", m_fftDisplayBuf + 1, usefulBins - 1, binHz);
 
-                            if (!isMono && processorR) {
-                                processorR->readLatestFft(m_fftDisplayBuf, usefulBins);
+                            if (!isMono && m_processorR) {
+                                m_processorR->readLatestFft(m_fftDisplayBuf, usefulBins);
                                 ImPlot::PlotLine("Right##analyzer_plot_fft_r", m_fftDisplayBuf + 1, usefulBins - 1, binHz);
                             }
 
@@ -443,7 +441,7 @@ namespace audio_analyzer {
 
                     ImGui::TableNextColumn();
 
-                    if (m_waterfallDisplayBuf && processorL) {
+                    if (m_waterfallDisplayBuf && m_processorL) {
                         if (ImPlot::BeginPlot("Waterfall", ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y))) {
 
                             m_waterfallRingBufL.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * fftSize / 2);

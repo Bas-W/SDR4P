@@ -124,8 +124,8 @@ namespace audio_analyzer {
         dsp::sink::Handler<dsp::stereo_t> m_audioSink;
         dsp::stream<dsp::complex_t> m_outStreamL;
         dsp::stream<dsp::complex_t> m_outStreamR;
-        std::shared_ptr<Processor> m_processorL;
-        std::shared_ptr<Processor> m_processorR;
+        std::unique_ptr<Processor> m_processorL;
+        std::unique_ptr<Processor> m_processorR;
 
         rbuf::SharedRingBuffer<float> m_displayRingBufL;
         rbuf::SharedRingBuffer<float> m_displayRingBufR;
