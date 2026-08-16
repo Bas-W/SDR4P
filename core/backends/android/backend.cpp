@@ -136,6 +136,7 @@ namespace backend {
         // Setup Dear ImGui context
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
+        ImPlot::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
         (void)io;
 
@@ -231,6 +232,7 @@ namespace backend {
         // Cleanup
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplAndroid_Shutdown();
+        ImPlot::DestroyContext();
         ImGui::DestroyContext();
 
         // Destroy all

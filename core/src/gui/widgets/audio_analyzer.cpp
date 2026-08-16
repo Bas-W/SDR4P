@@ -373,14 +373,28 @@ namespace audio_analyzer {
         std::unique_lock<std::mutex> lock(m_mutex);
 
         bool isMono = m_mono;
+        DisplayMode displayMode = m_displayMode;
+        bool dispModeChanged = false;
         size_t displayBufSize = m_displayBufSize;
         size_t waterfallFreqBinCount = m_waterfallBinCount;
         int fftSize = m_fftSize;
         uint64_t sampleRate = m_sampleRate;
 
-        if (ImGui::Combo(("##_recorder_stream_" + m_audioStreamName).c_str(), &m_audioStreamId, m_audioStreams.txt)) {
+        ImGui::SetNextItemWidth(150 * style::uiScale);
+        if (ImGui::Combo(("Source##analyzer_stream_" + m_audioStreamName).c_str(), &m_audioStreamId, m_audioStreams.txt)) {
             setAudioStream(m_audioStreams.value(m_audioStreamId));
         }
+
+        ImGui::SameLine();
+
+        ImGui::SetNextItemWidth(150 * style::uiScale);
+        if (ImGui::Combo("Freq. Axis Scaling##analyzer_dispMode", reinterpret_cast<int*>(&displayMode), DisplayMode_str)) {
+            m_displayMode = displayMode;
+            dispModeChanged = true;
+        }
+
+        double binHz = static_cast<double>(sampleRate) / static_cast<double>(fftSize);
+        int usefulBins = fftSize / 2;
 
         lock.unlock();
 
@@ -395,76 +409,184 @@ namespace audio_analyzer {
 
                     ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
 
-                    float waveformHeight = (spaceAvail.y - ImGui::GetStyle().ItemSpacing.y * 2) * 0.5f;
-                    float spectrumHeight = (spaceAvail.y - ImGui::GetStyle().ItemSpacing.y * 2) * 0.5f;
+                    static float ratiosWav[] = { 1, 1 };
+                    if (ImPlot::BeginSubplots("Waveform##analyzer_waveform_plots", isMono ? 1 : 2, 1, ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y),
+                                              ImPlotSubplotFlags_ColMajor | ImPlotSubplotFlags_LinkAllX | ImPlotSubplotFlags_LinkAllY | ImPlotSubplotFlags_NoLegend, isMono ? 0 : ratiosWav)) {
+                        if (ImPlot::BeginPlot(isMono ? "##analyzer_plot_waveform_l" : "Left##analyzer_plot_waveform_l", ImVec2(-1.0f, 0))) {
 
-                    if (ImPlot::BeginPlot("Waveform", ImVec2(-1.0f, waveformHeight))) {
+                            ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_NoDecorations);
+                            ImPlot::SetupAxis(ImAxis_Y1, NULL, ImPlotAxisFlags_NoDecorations);
 
-                        ImPlot::SetupAxesLimits(0, displayBufSize, -1.0, 1.0, ImPlotCond_Once);
+                            ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, displayBufSize);
 
-                        m_displayRingBufL.read(m_displayBuf, 0, displayBufSize);
+                            ImPlot::SetupAxesLimits(0, displayBufSize, -1.5, 1.5, ImPlotCond_Once);
 
-                        ImPlot::PlotLine(isMono ? "Mono##analyzer_plot_waveform_l" : "Left##analyzer_plot_waveform_l", m_displayBuf, displayBufSize);
-                        if (!isMono) {
-                            m_displayRingBufR.read(m_displayBuf, 0, displayBufSize);
-                            ImPlot::PlotLine("Right##analyzer_plot_waveform_r", m_displayBuf, displayBufSize);
-                        }
-
-                        ImPlot::EndPlot();
-                    }
-
-                    if (m_fftDisplayBuf && m_processorL) {
-                        if (ImPlot::BeginPlot("Spectrum", ImVec2(-1.0f, spectrumHeight))) {
-                            int usefulBins = fftSize / 2;
-                            m_processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
-
-                            double binHz = static_cast<double>(sampleRate) / static_cast<double>(fftSize);
-
-                            ImPlot::SetupAxis(ImAxis_X1, "Frequency (Hz)");
-                            ImPlot::SetupAxis(ImAxis_Y1, "Level (dB)");
-
-                            ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Log10);
-
-                            ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Once);
-                            ImPlot::SetupAxisLimits(ImAxis_Y1, -120.0, 0.0, ImPlotCond_Once);
-
-                            ImPlot::PlotLine(isMono ? "Mono##analyzer_plot_fft_l" : "Left##analyzer_plot_fft_l", m_fftDisplayBuf + 1, usefulBins - 1, binHz);
-
-                            if (!isMono && m_processorR) {
-                                m_processorR->readLatestFft(m_fftDisplayBuf, usefulBins);
-                                ImPlot::PlotLine("Right##analyzer_plot_fft_r", m_fftDisplayBuf + 1, usefulBins - 1, binHz);
-                            }
+                            m_displayRingBufL.read(m_displayBuf, 0, displayBufSize);
+                            ImPlot::PlotLine("##analyzer_plot_waveform_l", m_displayBuf, displayBufSize);
 
                             ImPlot::EndPlot();
                         }
+
+                        if (!isMono) {
+                            if (ImPlot::BeginPlot("Right##analyzer_plot_waveform_l", ImVec2(-1.0f, 0))) {
+
+                                ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_NoDecorations);
+                                ImPlot::SetupAxis(ImAxis_Y1, NULL, ImPlotAxisFlags_NoDecorations);
+
+                                ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, displayBufSize);
+
+                                ImPlot::SetupAxesLimits(0, displayBufSize, -1.5, 1.5, ImPlotCond_Once);
+
+                                m_displayRingBufR.read(m_displayBuf, 0, displayBufSize);
+                                ImPlot::PlotLine("##analyzer_plot_waveform_r", m_displayBuf, displayBufSize);
+
+                                ImPlot::EndPlot();
+                            }
+                        }
+                        ImPlot::EndSubplots();
                     }
 
                     ImGui::TableNextColumn();
 
-                    if (m_waterfallDisplayBuf && m_processorL) {
-                        if (ImPlot::BeginPlot("Waterfall", ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y))) {
+                    static float ratiosSpec[] = { 1, 3 };
+                    if (ImPlot::BeginSubplots("Spectrum##analyzer_spectrum_plots", 2, isMono ? 1 : 2, ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y),
+                                              ImPlotSubplotFlags_ColMajor | ImPlotSubplotFlags_LinkAllX | ImPlotSubplotFlags_NoLegend, ratiosSpec)) {
 
-                            m_waterfallRingBufL.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * fftSize / 2);
+                        if (m_fftDisplayBuf && m_processorL) {
+                            if (ImPlot::BeginPlot("##analyzer_plot_fft_l", ImVec2(-1.0f, -1.0f))) {
+                                m_processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
 
-                            ImPlot::PushColormap(ImPlotColormap_Viridis);
+                                ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoTickMarks);
+                                ImPlot::SetupAxis(ImAxis_Y1, "dB");
 
-                            ImPlot::PlotHeatmap("Waterfall",
-                                                m_waterfallDisplayBuf,
-                                                waterfallFreqBinCount,
-                                                fftSize / 2,
-                                                -100,
-                                                -10,
-                                                "",
-                                                ImPlotPoint(0, 0),
-                                                ImPlotPoint(1, -1),
-                                                ImPlotHeatmapFlags_None);
+                                ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
 
-                            ImPlot::PopColormap();
+                                ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, binHz, sampleRate / 2.0);
 
-                            ImPlot::EndPlot();
+                                ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Once);
+                                ImPlot::SetupAxisLimits(ImAxis_Y1, -120.0, 0.0, ImPlotCond_Once);
+
+                                if (dispModeChanged) {
+                                    ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Always);
+                                }
+
+                                ImPlot::PlotLine("##analyzer_plot_fft_l", m_fftDisplayBuf + 1, usefulBins - 1, binHz);
+                                ImPlot::PlotStems("##analyzer_plot_fft_l",
+                                                  m_fftDisplayBuf + 1, usefulBins - 1, -120, binHz, 0, ImPlotStemsFlags_None);
+
+                                ImPlot::EndPlot();
+                            }
                         }
+
+                        if (m_waterfallDisplayBuf && m_processorL) {
+                            if (ImPlot::BeginPlot("##analyzer_plot_waterfall_l", ImVec2(-1.0f, -1.0f), ImPlotFlags_NoLegend)) {
+
+                                m_waterfallRingBufL.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * usefulBins);
+
+                                ImPlot::SetupAxis(ImAxis_Y1, "", ImPlotAxisFlags_NoDecorations);
+                                ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_Foreground);
+
+                                ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
+
+                                ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, binHz, sampleRate / 2.0);
+                                ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, -1, 0);
+
+                                ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Once);
+                                ImPlot::SetupAxisLimits(ImAxis_Y1, -1, 0, ImPlotCond_Once);
+
+                                if (dispModeChanged) {
+                                    ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Always);
+                                }
+
+                                ImPlot::PushColormap(ImPlotColormap_Viridis);
+
+                                ImPlot::PlotHeatmap("##analyzer_plot_waterfall_l",
+                                                    m_waterfallDisplayBuf,
+                                                    waterfallFreqBinCount,
+                                                    usefulBins,
+                                                    -100,
+                                                    -10,
+                                                    nullptr,
+                                                    ImPlotPoint(binHz, 0),
+                                                    ImPlotPoint(sampleRate / 2.0, -1),
+                                                    ImPlotHeatmapFlags_None);
+
+                                ImPlot::PopColormap();
+
+                                ImPlot::EndPlot();
+                            }
+                        }
+
+                        if (!isMono) {
+                            if (m_fftDisplayBuf && m_processorR) {
+                                if (ImPlot::BeginPlot("##analyzer_plot_fft_r", ImVec2(-1.0f, -1.0f))) {
+                                    m_processorR->readLatestFft(m_fftDisplayBuf, usefulBins);
+
+                                    ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoTickMarks);
+                                    ImPlot::SetupAxis(ImAxis_Y1, "dB");
+
+                                    ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
+
+                                    ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, binHz, sampleRate / 2.0);
+
+                                    ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Once);
+                                    ImPlot::SetupAxisLimits(ImAxis_Y1, -120.0, 0.0, ImPlotCond_Once);
+
+                                    if (dispModeChanged) {
+                                        ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Always);
+                                    }
+
+                                    ImPlot::PlotLine("##analyzer_plot_fft_r", m_fftDisplayBuf + 1, usefulBins - 1, binHz);
+                                    ImPlot::PlotStems("##analyzer_plot_fft_r",
+                                                      m_fftDisplayBuf + 1, usefulBins - 1, -120, binHz, 0, ImPlotStemsFlags_None);
+
+                                    ImPlot::EndPlot();
+                                }
+                            }
+
+                            if (m_waterfallDisplayBuf && m_processorR) {
+                                if (ImPlot::BeginPlot("##analyzer_plot_waterfall_r", ImVec2(-1.0f, -1.0f), ImPlotFlags_NoLegend)) {
+
+                                    m_waterfallRingBufR.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * usefulBins);
+
+                                    ImPlot::SetupAxis(ImAxis_Y1, "", ImPlotAxisFlags_NoDecorations);
+                                    ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_Foreground);
+
+                                    ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
+
+                                    ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, binHz, sampleRate / 2.0);
+                                    ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, -1, 0);
+
+                                    ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Once);
+                                    ImPlot::SetupAxisLimits(ImAxis_Y1, -1, 0, ImPlotCond_Once);
+
+                                    if (dispModeChanged) {
+                                        ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Always);
+                                    }
+
+                                    ImPlot::PushColormap(ImPlotColormap_Viridis);
+
+                                    ImPlot::PlotHeatmap("##analyzer_plot_waterfall_r",
+                                                        m_waterfallDisplayBuf,
+                                                        waterfallFreqBinCount,
+                                                        usefulBins,
+                                                        -100,
+                                                        -10,
+                                                        nullptr,
+                                                        ImPlotPoint(binHz, 0),
+                                                        ImPlotPoint(sampleRate / 2.0, -1),
+                                                        ImPlotHeatmapFlags_None);
+
+                                    ImPlot::PopColormap();
+
+                                    ImPlot::EndPlot();
+                                }
+                            }
+                        }
+
+                        ImPlot::EndSubplots();
                     }
-                ImGui::EndTable();
+                    ImGui::EndTable();
                 }
             }
             else {

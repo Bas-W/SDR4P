@@ -389,8 +389,6 @@ int sdrpp_main(int argc, char* argv[]) {
     // Initialize SmGui in normal mode
     SmGui::init(false);
 
-    ImPlot::CreateContext();
-
     if (!style::loadFonts(resDir)) { return -1; }
     thememenu::init(resDir);
     LoadingScreen::init();

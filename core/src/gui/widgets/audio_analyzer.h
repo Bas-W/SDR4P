@@ -21,6 +21,14 @@ namespace audio_analyzer {
     constexpr uint32_t fftFreqRate_default = 15;
     constexpr uint32_t fftWaterfallBinCount_default = 256;
 
+    enum DisplayMode {
+        DisplayMode_lin,
+        DisplayMode_log10,
+        DisplayMode_optCount,
+    };
+
+    inline const char* DisplayMode_str {"Linear\0Logarithmic\0"};
+
     class Processor {
     public:
 
@@ -106,6 +114,7 @@ namespace audio_analyzer {
         std::mutex m_displayBufMutex;
 
         bool m_mono = true;
+        DisplayMode m_displayMode = DisplayMode_lin;
         size_t m_displayBufSize = 0;
         int m_audioStreamId = 0;
         std::string m_audioStreamName;
