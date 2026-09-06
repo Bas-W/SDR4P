@@ -1,10 +1,12 @@
-#include <backend.h>log
+#include <backend.h>
 #include "android_backend.h"
 #include <core.h>
 #include <gui/gui.h>
 #include "imgui.h"
 #include "imgui_impl_android.h"
 #include "imgui_impl_opengl3.h"
+#include "../../thirdparty/implot/implot.h"
+
 #include <android/log.h>
 #include <android_native_app_glue.h>
 #include <android/asset_manager.h>
@@ -24,7 +26,7 @@ namespace backend {
     EGLSurface _EglSurface = EGL_NO_SURFACE;
     EGLContext _EglContext = EGL_NO_CONTEXT;
     bool _Initialized = false;
-    char _LogTag[] = "SDR++";
+    char _LogTag[] = "SDR4P";
     bool initialized = false;
     bool pauseRendering = false;
     bool exited = false;
