@@ -2,7 +2,7 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "../../../decoder_modules/sdrpp_morse_decoder/lib/implot/implot.h"
+#include "../../thirdparty/implot/implot.h"
 
 #include <GLFW/glfw3.h>
 #include <utils/flog.h>
