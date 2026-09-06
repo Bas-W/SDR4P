@@ -2,7 +2,6 @@
 
 #include "imgui.h"
 #include "implot.h"
-#include "../../../../decoder_modules/sdrpp_morse_decoder/lib/implot/implot_internal.h"
 #include "signal_path/signal_path.h"
 
 namespace audio_analyzer {
