@@ -360,6 +360,7 @@ namespace audio_analyzer {
     void Analyzer::setMono(bool mono) {
         std::lock_guard<std::mutex> lock(m_mutex);
         m_mono = mono;
+        setAudioStream(m_audioStreamName);
     }
 
     bool Analyzer::isMono() {
@@ -368,7 +369,7 @@ namespace audio_analyzer {
     }
 
     void Analyzer::draw() {
-        ZoneScoped;
+        ZoneScopedN("draw_analyzer");
         std::unique_lock<std::mutex> lock(m_mutex);
 
         bool isMono = m_mono;
@@ -387,6 +388,18 @@ namespace audio_analyzer {
         ImGui::SameLine();
 
         ImGui::SetNextItemWidth(150 * style::uiScale);
+
+        bool isStereo = !isMono;
+
+        if (ImGui::Checkbox("Stereo##analyzer_stereoMode", &isStereo)) {
+            isMono = !isStereo;
+            m_mono = isMono;
+            setAudioStream(m_audioStreamName);
+        }
+
+        ImGui::SameLine();
+
+        ImGui::SetNextItemWidth(150 * style::uiScale);
         if (ImGui::Combo("Freq. Axis Scaling##analyzer_dispMode", reinterpret_cast<int*>(&displayMode), DisplayMode_str)) {
             m_displayMode = displayMode;
             dispModeChanged = true;
@@ -398,6 +411,7 @@ namespace audio_analyzer {
         lock.unlock();
 
         if (ImGui::BeginChild("##analyzer_disp")) {
+            ZoneScopedN("draw_analyzer_disp");
             if (displayBufSize > 0) {
                 std::lock_guard<std::mutex> lockDispBuf(m_displayBufMutex);
 
@@ -411,7 +425,9 @@ namespace audio_analyzer {
                     static float ratiosWav[] = { 1, 1 };
                     if (ImPlot::BeginSubplots("Waveform##analyzer_waveform_plots", isMono ? 1 : 2, 1, ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y),
                                               ImPlotSubplotFlags_ColMajor | ImPlotSubplotFlags_LinkAllX | ImPlotSubplotFlags_LinkAllY | ImPlotSubplotFlags_NoLegend, isMono ? 0 : ratiosWav)) {
+                        ZoneScopedN("draw_analyzer_disp_waveformPlots");
                         if (ImPlot::BeginPlot(isMono ? "##analyzer_plot_waveform_l" : "Left##analyzer_plot_waveform_l", ImVec2(-1.0f, 0))) {
+                            ZoneScopedN("draw_analyzer_disp_waveformPlot_0");
 
                             ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_NoDecorations);
                             ImPlot::SetupAxis(ImAxis_Y1, NULL, ImPlotAxisFlags_NoDecorations);
@@ -428,6 +444,7 @@ namespace audio_analyzer {
 
                         if (!isMono) {
                             if (ImPlot::BeginPlot("Right##analyzer_plot_waveform_l", ImVec2(-1.0f, 0))) {
+                                ZoneScopedN("draw_analyzer_disp_waveformPlot_1");
 
                                 ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_NoDecorations);
                                 ImPlot::SetupAxis(ImAxis_Y1, NULL, ImPlotAxisFlags_NoDecorations);
@@ -450,9 +467,11 @@ namespace audio_analyzer {
                     static float ratiosSpec[] = { 1, 3 };
                     if (ImPlot::BeginSubplots("Spectrum##analyzer_spectrum_plots", 2, isMono ? 1 : 2, ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y),
                                               ImPlotSubplotFlags_ColMajor | ImPlotSubplotFlags_LinkAllX | ImPlotSubplotFlags_NoLegend, ratiosSpec)) {
+                        ZoneScopedN("draw_analyzer_disp_fftPlots");
 
                         if (m_fftDisplayBuf && m_processorL) {
                             if (ImPlot::BeginPlot("##analyzer_plot_fft_l", ImVec2(-1.0f, -1.0f))) {
+                                ZoneScopedN("draw_analyzer_disp_fftPlot_0");
                                 m_processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
 
                                 ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoTickMarks);
@@ -479,6 +498,7 @@ namespace audio_analyzer {
 
                         if (m_waterfallDisplayBuf && m_processorL) {
                             if (ImPlot::BeginPlot("##analyzer_plot_waterfall_l", ImVec2(-1.0f, -1.0f), ImPlotFlags_NoLegend)) {
+                                ZoneScopedN("draw_analyzer_disp_waterfallPlot_0");
 
                                 m_waterfallRingBufL.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * usefulBins);
 
@@ -519,6 +539,7 @@ namespace audio_analyzer {
                         if (!isMono) {
                             if (m_fftDisplayBuf && m_processorR) {
                                 if (ImPlot::BeginPlot("##analyzer_plot_fft_r", ImVec2(-1.0f, -1.0f))) {
+                                    ZoneScopedN("draw_analyzer_disp_fftPlot_1");
                                     m_processorR->readLatestFft(m_fftDisplayBuf, usefulBins);
 
                                     ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoTickMarks);
@@ -545,6 +566,7 @@ namespace audio_analyzer {
 
                             if (m_waterfallDisplayBuf && m_processorR) {
                                 if (ImPlot::BeginPlot("##analyzer_plot_waterfall_r", ImVec2(-1.0f, -1.0f), ImPlotFlags_NoLegend)) {
+                                    ZoneScopedN("draw_analyzer_disp_waterfallPlot_1");
 
                                     m_waterfallRingBufR.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * usefulBins);
 
@@ -707,7 +729,7 @@ namespace audio_analyzer {
     }
 
     void Manager::draw() {
-        ZoneScoped;
+        ZoneScopedN("draw_analyzer_menu");
         if (ImGui::BeginChild("Audio Analyzer")) {
 
             if (ImGui::Button("Add Analyzer")) {
