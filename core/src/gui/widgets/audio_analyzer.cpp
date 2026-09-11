@@ -508,7 +508,7 @@ namespace audio_analyzer {
                             glUniform1i(glGetUniformLocation(m_waveformShaderProgram, "sampleCount"), static_cast<GLint>(displayBufSize));
                             glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "minVal"), -1.0);
                             glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "maxVal"), 1.0);
-                            glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "smoothingMul"), 1.5);
+                            glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "overlapRatio"), 0.5);
 
                             glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_waveformGpuBufId);
                             glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, displayBufSize * sizeof(float), m_displayBuf);
