@@ -635,7 +635,7 @@ void MainWindow::draw() {
     // Center Column
     ImGui::NextColumn();
 
-    ImGui::BeginChild("Waterfall", ImVec2(0, -400 * style::uiScale));
+    ImGui::BeginChild("Waterfall", ImVec2(0, -550 * style::uiScale));
 
     // @TODO: add bottom toolbar?
     gui::waterfall.draw();

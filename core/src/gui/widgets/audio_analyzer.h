@@ -1,4 +1,6 @@
 #pragma once
+#include <glad/glad.h>
+#include "imgui.h"
 #include "dsp/chain.h"
 #include "dsp/stream.h"
 #include "dsp/types.h"
@@ -28,6 +30,13 @@ namespace audio_analyzer {
     };
 
     inline const char* DisplayMode_str {"Linear\0Logarithmic\0"};
+
+    enum RenderMode {
+        RenderMode_Shader,
+        RenderMode_ImPlot,
+    };
+
+    inline const char* RenderMode_str {"Shader\0ImPlot\0"};
 
     class Processor {
     public:
@@ -99,6 +108,9 @@ namespace audio_analyzer {
         void initDisplayBuffers(size_t waveformBufSize, size_t waterfallBinCount = fftWaterfallBinCount_default);
         void freeDisplayBuffers();
 
+        void loadShaders();
+        void deleteShaders();
+
         void start();
         void stop();
 
@@ -115,10 +127,14 @@ namespace audio_analyzer {
 
         bool m_mono = true;
         DisplayMode m_displayMode = DisplayMode_lin;
+        RenderMode m_renderMode = RenderMode_Shader;
         size_t m_displayBufSize = 0;
         int m_audioStreamId = 0;
         std::string m_audioStreamName;
         uint64_t m_sampleRate = 0;
+
+        int m_waveformDispWidth = 1024;
+        int m_waveformDispHeight = 512;
 
         int m_fftSize = fftFreqBinSize_default;
         size_t m_waterfallBinCount = fftWaterfallBinCount_default;
@@ -144,6 +160,10 @@ namespace audio_analyzer {
         float* m_displayBuf = nullptr;
         float* m_fftDisplayBuf = nullptr;
         float* m_waterfallDisplayBuf = nullptr;
+
+        GLuint m_waveformShaderProgram = 0;
+        GLuint m_waveformGpuBufId = 0;
+        GLuint m_waveformTexId = 0;
 
         static void audioHandler(dsp::stereo_t* data, int count, void* ctx);
 

@@ -30,6 +30,10 @@ endif (OPT_BACKEND_ANDROID)
 # Add code to dyn lib
 add_library(sdrpp_core SHARED ${SRC} ${BACKEND_SRC})
 
+# Add glad
+target_sources(sdrpp_core PRIVATE "${CMAKE_SOURCE_DIR}/thirdparty/glad/src/glad.c")
+target_include_directories(sdrpp_core PUBLIC "${CMAKE_SOURCE_DIR}/thirdparty/glad/include")
+
 # Add tracy profiler
 target_sources(sdrpp_core PRIVATE "${CMAKE_SOURCE_DIR}/thirdparty/tracy/public/TracyClient.cpp")
 target_include_directories(sdrpp_core PUBLIC "${CMAKE_SOURCE_DIR}/thirdparty/tracy/public" "${CMAKE_SOURCE_DIR}/thirdparty/tracy/public/tracy")

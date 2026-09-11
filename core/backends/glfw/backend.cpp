@@ -2,8 +2,9 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
-#include "../../thirdparty/implot/implot.h"
+#include "implot.h"
 
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <utils/flog.h>
 #include <utils/opengl_include_code.h>
@@ -118,6 +119,12 @@ namespace backend {
             }
             flog::info("Using OpenGL {0}.{1}{2}", OPENGL_VERSIONS_MAJOR[i], OPENGL_VERSIONS_MINOR[i], OPENGL_VERSIONS_IS_ES[i] ? " ES" : "");
             glfwMakeContextCurrent(window);
+            if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
+                flog::error("Failed to initialize GLAD");
+                glfwDestroyWindow(window);
+                window = NULL;
+                continue;
+            }
             break;
         }
 

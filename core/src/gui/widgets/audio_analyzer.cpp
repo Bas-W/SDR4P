@@ -1,8 +1,13 @@
 #include "audio_analyzer.h"
 
+#include "core.h"
 #include "imgui.h"
 #include "implot.h"
 #include "signal_path/signal_path.h"
+#include "utils/opengl_helpers.h"
+
+#include <filesystem>
+#include <GL/glext.h>
 
 namespace audio_analyzer {
     Processor::~Processor() {
@@ -199,6 +204,7 @@ namespace audio_analyzer {
     Analyzer::~Analyzer() {
         stop();
         freeDisplayBuffers();
+        deleteShaders();
     }
 
     void Analyzer::init() {
@@ -218,6 +224,21 @@ namespace audio_analyzer {
         sigpath::sinkManager.onStreamUnregister.bindHandler(&m_onStreamUnregisteredHandler);
 
         if (!names.empty()) setAudioStream(names.at(0));
+
+        glGenTextures(1, &m_waveformTexId);
+        glBindTexture(GL_TEXTURE_2D, m_waveformTexId);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        glGenBuffers(1, &m_waveformGpuBufId);
+        glBindBuffer(GL_ARRAY_BUFFER, m_waveformGpuBufId);
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        loadShaders();
     }
 
     void Analyzer::initDisplayBuffers(size_t waveformBufSize, size_t waterfallBinCount) {
@@ -247,6 +268,24 @@ namespace audio_analyzer {
 
         if (m_displayBuf) free(m_displayBuf);
         m_displayBuf = static_cast<float*>(malloc(m_displayBufSize * sizeof(float)));
+
+        glBindBuffer(GL_ARRAY_BUFFER, m_waveformGpuBufId);
+        glBufferData(GL_ARRAY_BUFFER, m_displayBufSize * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        glBindTexture(GL_TEXTURE_2D, m_waveformTexId);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA8,
+            m_waveformDispWidth,
+            m_waveformDispHeight,
+            0,
+            GL_RGB,
+            GL_UNSIGNED_BYTE,
+            nullptr
+        );
+        glBindTexture(GL_TEXTURE_2D, 0);
 
         if (m_fftDisplayBuf) free(m_fftDisplayBuf);
         m_fftDisplayBuf = static_cast<float*>(malloc((m_fftSize / 2) * sizeof(float)));
@@ -280,6 +319,45 @@ namespace audio_analyzer {
         if (m_waterfallDisplayBuf) {
             free(m_waterfallDisplayBuf);
             m_waterfallDisplayBuf = nullptr;
+        }
+
+        if (m_waveformGpuBufId != 0) {
+            glDeleteBuffers(1, &m_waveformGpuBufId);
+            m_waveformGpuBufId = 0;
+        }
+
+        if (m_waveformTexId != 0) {
+            glDeleteTextures(1, &m_waveformTexId);
+            m_waveformTexId = 0;
+        }
+    }
+
+    //@TODO: temporary code, fix
+    void Analyzer::loadShaders() {
+        /*
+        core::configManager.acquire();
+        std::string resDir = core::configManager.conf["resourcesDirectory"];
+        core::configManager.release();
+
+        std::string shaderPath = resDir+"/shaders/waveform.glsl";
+        */
+        std::string shaderPath = "/home/Bas/Software/SDR4P/root/res/shaders/waveform.glsl";
+        if (std::filesystem::is_regular_file(shaderPath)) {
+            GLuint shader = opengl_helpers::loadShader(shaderPath.c_str(), GL_COMPUTE_SHADER);
+            if (shader) {
+                m_waveformShaderProgram = glCreateProgram();
+                glAttachShader(m_waveformShaderProgram, shader);
+                glLinkProgram(m_waveformShaderProgram);
+                glDeleteShader(shader);
+            }
+        } else {
+            flog::error("Failed to load waveform shader, invalid path");
+        }
+    }
+
+    void Analyzer::deleteShaders() {
+        if (m_waveformShaderProgram) {
+            glDeleteProgram(m_waveformShaderProgram);
         }
     }
 
@@ -379,6 +457,7 @@ namespace audio_analyzer {
         size_t waterfallFreqBinCount = m_waterfallBinCount;
         int fftSize = m_fftSize;
         uint64_t sampleRate = m_sampleRate;
+        RenderMode renderMode = m_renderMode;
 
         ImGui::SetNextItemWidth(150 * style::uiScale);
         if (ImGui::Combo(("Source##analyzer_stream_" + m_audioStreamName).c_str(), &m_audioStreamId, m_audioStreams.txt)) {
@@ -422,29 +501,46 @@ namespace audio_analyzer {
 
                     ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
 
-                    static float ratiosWav[] = { 1, 1 };
-                    if (ImPlot::BeginSubplots("Waveform##analyzer_waveform_plots", isMono ? 1 : 2, 1, ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y),
-                                              ImPlotSubplotFlags_ColMajor | ImPlotSubplotFlags_LinkAllX | ImPlotSubplotFlags_LinkAllY | ImPlotSubplotFlags_NoLegend, isMono ? 0 : ratiosWav)) {
-                        ZoneScopedN("draw_analyzer_disp_waveformPlots");
-                        if (ImPlot::BeginPlot(isMono ? "##analyzer_plot_waveform_l" : "Left##analyzer_plot_waveform_l", ImVec2(-1.0f, 0))) {
-                            ZoneScopedN("draw_analyzer_disp_waveformPlot_0");
-
-                            ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_NoDecorations);
-                            ImPlot::SetupAxis(ImAxis_Y1, NULL, ImPlotAxisFlags_NoDecorations);
-
-                            ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, displayBufSize);
-
-                            ImPlot::SetupAxesLimits(0, displayBufSize, -1.5, 1.5, ImPlotCond_Once);
-
+                    if (renderMode == RenderMode_Shader) {
+                        if (m_waveformGpuBufId && m_waveformTexId && m_waveformShaderProgram) {
                             m_displayRingBufL.read(m_displayBuf, 0, displayBufSize);
-                            ImPlot::PlotLine("##analyzer_plot_waveform_l", m_displayBuf, displayBufSize);
 
-                            ImPlot::EndPlot();
+                            glUniform1i(glGetUniformLocation(m_waveformShaderProgram, "sampleCount"), static_cast<GLint>(displayBufSize));
+                            glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "minVal"), -1.0);
+                            glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "maxVal"), 1.0);
+                            glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "smoothingMul"), 1.5);
+
+                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_waveformGpuBufId);
+                            glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, displayBufSize * sizeof(float), m_displayBuf);
+                            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_waveformGpuBufId);
+                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+                            glBindTexture(GL_TEXTURE_2D, m_waveformTexId);
+                            glBindImageTexture(
+                                1,
+                                m_waveformTexId,
+                                0,
+                                GL_FALSE,
+                                0,
+                                GL_WRITE_ONLY,
+                                GL_RGBA8
+                            );
+
+                            glUseProgram(m_waveformShaderProgram);
+                            glDispatchCompute(std::ceil((float)m_waveformDispWidth), std::ceil((float)m_waveformDispHeight / 64.0), 1);
+                            glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+
+                            ImGui::Image((ImTextureID)(uintptr_t)m_waveformTexId, ImVec2(m_waveformDispWidth, m_waveformDispHeight));
+                        } else {
+                            ImGui::Text("buf: %i\ntex: %i\nshader: %i", m_waveformGpuBufId, m_waveformTexId, m_waveformShaderProgram);
                         }
-
-                        if (!isMono) {
-                            if (ImPlot::BeginPlot("Right##analyzer_plot_waveform_l", ImVec2(-1.0f, 0))) {
-                                ZoneScopedN("draw_analyzer_disp_waveformPlot_1");
+                    } else {
+                        static float ratiosWav[] = { 1, 1 };
+                        if (ImPlot::BeginSubplots("Waveform##analyzer_waveform_plots", isMono ? 1 : 2, 1, ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y),
+                                                  ImPlotSubplotFlags_ColMajor | ImPlotSubplotFlags_LinkAllX | ImPlotSubplotFlags_LinkAllY | ImPlotSubplotFlags_NoLegend, isMono ? 0 : ratiosWav)) {
+                            ZoneScopedN("draw_analyzer_disp_waveformPlots");
+                            if (ImPlot::BeginPlot(isMono ? "##analyzer_plot_waveform_l" : "Left##analyzer_plot_waveform_l", ImVec2(-1.0f, 0))) {
+                                ZoneScopedN("draw_analyzer_disp_waveformPlot_0");
 
                                 ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_NoDecorations);
                                 ImPlot::SetupAxis(ImAxis_Y1, NULL, ImPlotAxisFlags_NoDecorations);
@@ -453,13 +549,31 @@ namespace audio_analyzer {
 
                                 ImPlot::SetupAxesLimits(0, displayBufSize, -1.5, 1.5, ImPlotCond_Once);
 
-                                m_displayRingBufR.read(m_displayBuf, 0, displayBufSize);
-                                ImPlot::PlotLine("##analyzer_plot_waveform_r", m_displayBuf, displayBufSize);
+                                m_displayRingBufL.read(m_displayBuf, 0, displayBufSize);
+                                ImPlot::PlotLine("##analyzer_plot_waveform_l", m_displayBuf, displayBufSize);
 
                                 ImPlot::EndPlot();
                             }
-                        }
-                        ImPlot::EndSubplots();
+
+                            if (!isMono) {
+                                if (ImPlot::BeginPlot("Right##analyzer_plot_waveform_l", ImVec2(-1.0f, 0))) {
+                                    ZoneScopedN("draw_analyzer_disp_waveformPlot_1");
+
+                                    ImPlot::SetupAxis(ImAxis_X1, NULL, ImPlotAxisFlags_NoDecorations);
+                                    ImPlot::SetupAxis(ImAxis_Y1, NULL, ImPlotAxisFlags_NoDecorations);
+
+                                    ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, 0, displayBufSize);
+
+                                    ImPlot::SetupAxesLimits(0, displayBufSize, -1.5, 1.5, ImPlotCond_Once);
+
+                                    m_displayRingBufR.read(m_displayBuf, 0, displayBufSize);
+                                    ImPlot::PlotLine("##analyzer_plot_waveform_r", m_displayBuf, displayBufSize);
+
+                                    ImPlot::EndPlot();
+                                }
+                            }
+                            ImPlot::EndSubplots();
+                                                  }
                     }
 
                     ImGui::TableNextColumn();

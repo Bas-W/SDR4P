@@ -4,7 +4,6 @@
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 #include <utils/event.h>
-
 #include <utils/opengl_include_code.h>
 #include <gui/style.h>
 
