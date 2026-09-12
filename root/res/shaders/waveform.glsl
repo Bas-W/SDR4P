@@ -22,9 +22,8 @@ void main() {
         return;
     }
 
-    vec4 backgroundColor = vec4(0.1, 0.1, 0.2, 1.0);
-    vec4 centerLineColor = vec4(0.18, 0.18, 0.18, 1.0);
-    vec4 waveformColor = vec4(0.1, 0.3, 1.0, 1.0);
+    vec4 backgroundColor = vec4(0.1, 0.1, 0.1, 1.0);
+    vec4 waveformColor = vec4(0.1, 0.3, 0.8, 1.0);
 
     if (sampleCount <= 0 || maxVal <= minVal) {
         imageStore(outputTexture, pixel, backgroundColor);
@@ -72,10 +71,8 @@ void main() {
 
     vec4 color = backgroundColor;
 
-    if (abs(float(pixel.y) - centerY) <= 0.5) {
-        color = centerLineColor;
-    } else if (pixel.y >= waveformYMax && pixel.y <= waveformYMin) {
-        color = waveformColor * (1.0 - distance(uv.y, normalizedAvg));
+    if (pixel.y >= waveformYMax && pixel.y <= waveformYMin) {
+        color = waveformColor;
     }
 
     imageStore(outputTexture, pixel, color);

@@ -42,6 +42,8 @@ void MainWindow::init() {
 
     credits::init();
 
+    gui::audioAnalyzer.init();
+
     core::configManager.acquire();
     json menuElements = core::configManager.conf["menuElements"];
     std::string modulesDir = core::configManager.conf["modulesDirectory"];

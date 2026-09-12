@@ -1,10 +1,10 @@
 #pragma once
+#include "utils/opengl_include_code.h"
 #include <cstdio>
-#include <glad/glad.h>
 #include "flog.h"
 
 namespace opengl_helpers {
-    inline GLuint loadShader(const char* path, uint16_t type) {
+    inline GLuint loadComputeShader(const char* path) {
         flog::info("Loading shader file: \"{}\"", path);
         std::FILE* file = fopen(path, "r");
         if (!file) {
@@ -31,7 +31,7 @@ namespace opengl_helpers {
         }
 
         GLuint shader_id = 0;
-        shader_id = glCreateShader(type);
+        shader_id = glCreateShader(GL_COMPUTE_SHADER);
         const GLchar* source = data;
         GLint sourceSize = static_cast<GLint>(size);
         glShaderSource(shader_id, 1, &source, &sourceSize);
@@ -55,4 +55,49 @@ namespace opengl_helpers {
 
         return shader_id;
     }
+
+    inline GLuint linkComputeShader(GLuint shader) {
+        if (!shader) {
+            return 0;
+        }
+        GLuint program = glCreateProgram();
+        glAttachShader(program, shader);
+        glLinkProgram(program);
+        return program;
+    }
+
+    class computeShader {
+    public:
+        GLuint m_shaderProgram;
+
+        computeShader() {
+            m_shaderProgram = 0;
+        }
+
+        ~computeShader() {
+            unload();
+        }
+
+        bool load(const char* path) {
+            if (m_shaderProgram) {
+                unload();
+            }
+            GLuint shader = loadComputeShader(path);
+            if (shader) {
+                GLuint program = linkComputeShader(shader);
+                glDeleteShader(shader);
+                if (!program) {
+                    return false;
+                }
+                m_shaderProgram = program;
+                return true;
+            }
+            return false;
+        }
+        void unload() const {
+            if (m_shaderProgram) {
+                glDeleteProgram(m_shaderProgram);
+            }
+        }
+    };
 }

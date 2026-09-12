@@ -1,5 +1,5 @@
 #pragma once
-#include <glad/glad.h>
+#include "audio_analyzer_graphics.h"
 #include "imgui.h"
 #include "dsp/chain.h"
 #include "dsp/stream.h"
@@ -15,13 +15,18 @@
 #include <vector>
 #include "utils/ring_buffer.h"
 #include <mutex>
-
 #include <fftw3.h>
 
 namespace audio_analyzer {
     constexpr uint32_t fftFreqBinSize_default = 2048;
     constexpr uint32_t fftFreqRate_default = 15;
     constexpr uint32_t fftWaterfallBinCount_default = 256;
+
+    constexpr const char* waveformDisp_shader_name_default = "waveform";
+    constexpr uint32_t waveformDisp_shader_workgroup_width_default = 1;
+    constexpr uint32_t waveformDisp_shader_workgroup_height_default = 64;
+    constexpr uint32_t waveformDisp_display_width_default = 512;
+    constexpr uint32_t waveformDisp_display_height_default = 256;
 
     enum DisplayMode {
         DisplayMode_lin,
@@ -108,8 +113,7 @@ namespace audio_analyzer {
         void initDisplayBuffers(size_t waveformBufSize, size_t waterfallBinCount = fftWaterfallBinCount_default);
         void freeDisplayBuffers();
 
-        void loadShaders();
-        void deleteShaders();
+        void initShaders(std::shared_ptr<std::vector<std::shared_ptr<audio_analyzer_gfx::Shader>>> computeShaders);
 
         void start();
         void stop();
@@ -125,16 +129,21 @@ namespace audio_analyzer {
         std::mutex m_mutex;
         std::mutex m_displayBufMutex;
 
+        std::shared_ptr<std::vector<std::shared_ptr<audio_analyzer_gfx::Shader>>> m_computeShaders;
+
         bool m_mono = true;
         DisplayMode m_displayMode = DisplayMode_lin;
         RenderMode m_renderMode = RenderMode_Shader;
-        size_t m_displayBufSize = 0;
+        size_t m_waveformDisplayBufSize = 0;
         int m_audioStreamId = 0;
         std::string m_audioStreamName;
         uint64_t m_sampleRate = 0;
 
-        int m_waveformDispWidth = 1024;
-        int m_waveformDispHeight = 512;
+        int m_waveformDispWidth = waveformDisp_display_width_default;
+        int m_waveformDispHeight = waveformDisp_display_height_default;
+
+        int m_waveformWorkGroupWidth = waveformDisp_shader_workgroup_width_default;
+        int m_waveformWorkGroupHeight = waveformDisp_shader_workgroup_height_default;
 
         int m_fftSize = fftFreqBinSize_default;
         size_t m_waterfallBinCount = fftWaterfallBinCount_default;
@@ -152,16 +161,16 @@ namespace audio_analyzer {
         std::unique_ptr<Processor> m_processorL;
         std::unique_ptr<Processor> m_processorR;
 
-        rbuf::SharedRingBuffer<float> m_displayRingBufL;
-        rbuf::SharedRingBuffer<float> m_displayRingBufR;
+        rbuf::SharedRingBuffer<float> m_waveformRingBufL;
+        rbuf::SharedRingBuffer<float> m_waveformRingBufR;
         rbuf::SharedRingBuffer<float> m_waterfallRingBufL;
         rbuf::SharedRingBuffer<float> m_waterfallRingBufR;
 
-        float* m_displayBuf = nullptr;
+        float* m_waveformDisplayBuf = nullptr;
         float* m_fftDisplayBuf = nullptr;
         float* m_waterfallDisplayBuf = nullptr;
 
-        GLuint m_waveformShaderProgram = 0;
+        std::shared_ptr<audio_analyzer_gfx::Shader> m_waveformShader = nullptr;
         GLuint m_waveformGpuBufId = 0;
         GLuint m_waveformTexId = 0;
 
@@ -176,13 +185,12 @@ namespace audio_analyzer {
 
     class Manager {
     public:
-        /*
-        Manager();
-        ~Manager();
 
         void init();
-        */
+
         void doPostInit();
+
+        void loadShaders();
 
         void addAnalyzer();
 
@@ -191,5 +199,6 @@ namespace audio_analyzer {
     private:
         std::vector<std::shared_ptr<Analyzer>> m_analyzers;
         std::shared_ptr<OptionList<std::string, std::string>> m_audioStreams;
+        std::shared_ptr<std::vector<std::shared_ptr<audio_analyzer_gfx::Shader>>> m_computeShaders;
     };
 }

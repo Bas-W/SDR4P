@@ -4,10 +4,7 @@
 #include "imgui.h"
 #include "implot.h"
 #include "signal_path/signal_path.h"
-#include "utils/opengl_helpers.h"
-
 #include <filesystem>
-#include <GL/glext.h>
 
 namespace audio_analyzer {
     Processor::~Processor() {
@@ -204,7 +201,6 @@ namespace audio_analyzer {
     Analyzer::~Analyzer() {
         stop();
         freeDisplayBuffers();
-        deleteShaders();
     }
 
     void Analyzer::init() {
@@ -237,24 +233,22 @@ namespace audio_analyzer {
         glBindBuffer(GL_ARRAY_BUFFER, m_waveformGpuBufId);
         glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-        loadShaders();
     }
 
     void Analyzer::initDisplayBuffers(size_t waveformBufSize, size_t waterfallBinCount) {
         std::lock_guard<std::mutex> lock(m_mutex);
         std::lock_guard<std::mutex> lockDispBuf(m_displayBufMutex);
 
-        m_displayBufSize = waveformBufSize;
+        m_waveformDisplayBufSize = waveformBufSize;
         m_waterfallBinCount = waterfallBinCount;
 
-        m_displayRingBufL.init(m_displayBufSize);
+        m_waveformRingBufL.init(m_waveformDisplayBufSize);
 
         if (!m_mono) {
-            m_displayRingBufR.init(m_displayBufSize);
+            m_waveformRingBufR.init(m_waveformDisplayBufSize);
         }
         else {
-            m_displayRingBufR.freeBuf();
+            m_waveformRingBufR.freeBuf();
         }
 
         m_waterfallRingBufL.init(m_waterfallBinCount * m_fftSize / 2);
@@ -266,11 +260,11 @@ namespace audio_analyzer {
             m_waterfallRingBufR.freeBuf();
         }
 
-        if (m_displayBuf) free(m_displayBuf);
-        m_displayBuf = static_cast<float*>(malloc(m_displayBufSize * sizeof(float)));
+        if (m_waveformDisplayBuf) free(m_waveformDisplayBuf);
+        m_waveformDisplayBuf = static_cast<float*>(malloc(m_waveformDisplayBufSize * sizeof(float)));
 
         glBindBuffer(GL_ARRAY_BUFFER, m_waveformGpuBufId);
-        glBufferData(GL_ARRAY_BUFFER, m_displayBufSize * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, m_waveformDisplayBufSize * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
         glBindTexture(GL_TEXTURE_2D, m_waveformTexId);
@@ -298,17 +292,17 @@ namespace audio_analyzer {
         std::lock_guard<std::mutex> lock(m_mutex);
         std::lock_guard<std::mutex> lockDispBuf(m_displayBufMutex);
 
-        m_displayBufSize = 0;
+        m_waveformDisplayBufSize = 0;
 
-        m_displayRingBufL.freeBuf();
-        m_displayRingBufR.freeBuf();
+        m_waveformRingBufL.freeBuf();
+        m_waveformRingBufR.freeBuf();
 
         m_waterfallRingBufL.freeBuf();
         m_waterfallRingBufR.freeBuf();
 
-        if (m_displayBuf) {
-            free(m_displayBuf);
-            m_displayBuf = nullptr;
+        if (m_waveformDisplayBuf) {
+            free(m_waveformDisplayBuf);
+            m_waveformDisplayBuf = nullptr;
         }
 
         if (m_fftDisplayBuf) {
@@ -332,32 +326,13 @@ namespace audio_analyzer {
         }
     }
 
-    //@TODO: temporary code, fix
-    void Analyzer::loadShaders() {
-        /*
-        core::configManager.acquire();
-        std::string resDir = core::configManager.conf["resourcesDirectory"];
-        core::configManager.release();
-
-        std::string shaderPath = resDir+"/shaders/waveform.glsl";
-        */
-        std::string shaderPath = "/home/Bas/Software/SDR4P/root/res/shaders/waveform.glsl";
-        if (std::filesystem::is_regular_file(shaderPath)) {
-            GLuint shader = opengl_helpers::loadShader(shaderPath.c_str(), GL_COMPUTE_SHADER);
-            if (shader) {
-                m_waveformShaderProgram = glCreateProgram();
-                glAttachShader(m_waveformShaderProgram, shader);
-                glLinkProgram(m_waveformShaderProgram);
-                glDeleteShader(shader);
+    void Analyzer::initShaders(std::shared_ptr<std::vector<std::shared_ptr<audio_analyzer_gfx::Shader>>> computeShaders) {
+        m_computeShaders = computeShaders;
+        for (int i = 0; i < m_computeShaders->size(); i++) {
+            if (m_computeShaders->at(i)->name == "waveform") {
+                m_waveformShader = m_computeShaders->at(i);
+                break;
             }
-        } else {
-            flog::error("Failed to load waveform shader, invalid path");
-        }
-    }
-
-    void Analyzer::deleteShaders() {
-        if (m_waveformShaderProgram) {
-            glDeleteProgram(m_waveformShaderProgram);
         }
     }
 
@@ -453,7 +428,7 @@ namespace audio_analyzer {
         bool isMono = m_mono;
         DisplayMode displayMode = m_displayMode;
         bool dispModeChanged = false;
-        size_t displayBufSize = m_displayBufSize;
+        size_t displayBufSize = m_waveformDisplayBufSize;
         size_t waterfallFreqBinCount = m_waterfallBinCount;
         int fftSize = m_fftSize;
         uint64_t sampleRate = m_sampleRate;
@@ -502,37 +477,31 @@ namespace audio_analyzer {
                     ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
 
                     if (renderMode == RenderMode_Shader) {
-                        if (m_waveformGpuBufId && m_waveformTexId && m_waveformShaderProgram) {
-                            m_displayRingBufL.read(m_displayBuf, 0, displayBufSize);
+                        ZoneScopedN("draw_analyzer_disp_waveformPlots_shader");
+                        if (m_waveformGpuBufId && m_waveformTexId && m_waveformShader) {
+                            if (m_waveformShader->shader.m_shaderProgram) {
+                                m_waveformRingBufL.read(m_waveformDisplayBuf, 0, displayBufSize);
 
-                            glUniform1i(glGetUniformLocation(m_waveformShaderProgram, "sampleCount"), static_cast<GLint>(displayBufSize));
-                            glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "minVal"), -1.0);
-                            glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "maxVal"), 1.0);
-                            glUniform1f(glGetUniformLocation(m_waveformShaderProgram, "overlapRatio"), 0.5);
+                                audio_analyzer_gfx::ComputeShaderParams params{
+                                    m_waveformGpuBufId,
+                                    m_waveformTexId,
+                                    m_waveformShader->shader.m_shaderProgram,
+                                    waveformDisp_shader_workgroup_width_default,
+                                    waveformDisp_shader_workgroup_height_default,
+                                    waveformDisp_display_width_default,
+                                    waveformDisp_display_height_default
+                                };
 
-                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_waveformGpuBufId);
-                            glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, displayBufSize * sizeof(float), m_displayBuf);
-                            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_waveformGpuBufId);
-                            glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+                                audio_analyzer_gfx::WaveformShaderInput input{
+                                    -2.0f,
+                                    2.0f,
+                                    0.5f
+                                };
 
-                            glBindTexture(GL_TEXTURE_2D, m_waveformTexId);
-                            glBindImageTexture(
-                                1,
-                                m_waveformTexId,
-                                0,
-                                GL_FALSE,
-                                0,
-                                GL_WRITE_ONLY,
-                                GL_RGBA8
-                            );
+                                audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
 
-                            glUseProgram(m_waveformShaderProgram);
-                            glDispatchCompute(std::ceil((float)m_waveformDispWidth), std::ceil((float)m_waveformDispHeight / 64.0), 1);
-                            glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
-
-                            ImGui::Image((ImTextureID)(uintptr_t)m_waveformTexId, ImVec2(m_waveformDispWidth, m_waveformDispHeight));
-                        } else {
-                            ImGui::Text("buf: %i\ntex: %i\nshader: %i", m_waveformGpuBufId, m_waveformTexId, m_waveformShaderProgram);
+                                ImGui::Image((ImTextureID)(uintptr_t)m_waveformTexId, ImVec2(m_waveformDispWidth, m_waveformDispHeight));
+                            }
                         }
                     } else {
                         static float ratiosWav[] = { 1, 1 };
@@ -549,8 +518,8 @@ namespace audio_analyzer {
 
                                 ImPlot::SetupAxesLimits(0, displayBufSize, -1.5, 1.5, ImPlotCond_Once);
 
-                                m_displayRingBufL.read(m_displayBuf, 0, displayBufSize);
-                                ImPlot::PlotLine("##analyzer_plot_waveform_l", m_displayBuf, displayBufSize);
+                                m_waveformRingBufL.read(m_waveformDisplayBuf, 0, displayBufSize);
+                                ImPlot::PlotLine("##analyzer_plot_waveform_l", m_waveformDisplayBuf, displayBufSize);
 
                                 ImPlot::EndPlot();
                             }
@@ -566,8 +535,8 @@ namespace audio_analyzer {
 
                                     ImPlot::SetupAxesLimits(0, displayBufSize, -1.5, 1.5, ImPlotCond_Once);
 
-                                    m_displayRingBufR.read(m_displayBuf, 0, displayBufSize);
-                                    ImPlot::PlotLine("##analyzer_plot_waveform_r", m_displayBuf, displayBufSize);
+                                    m_waveformRingBufR.read(m_waveformDisplayBuf, 0, displayBufSize);
+                                    ImPlot::PlotLine("##analyzer_plot_waveform_r", m_waveformDisplayBuf, displayBufSize);
 
                                     ImPlot::EndPlot();
                                 }
@@ -737,7 +706,7 @@ namespace audio_analyzer {
 
         std::lock_guard<std::mutex> lock(_this->m_mutex);
 
-        size_t tempBufSize = std::min(_this->m_displayBufSize, static_cast<size_t>(count));
+        size_t tempBufSize = std::min(_this->m_waveformDisplayBufSize, static_cast<size_t>(count));
 
         if (_this->m_mono) {
             dsp::complex_t* out = _this->m_outStreamL.writeBuf;
@@ -751,7 +720,7 @@ namespace audio_analyzer {
                 }
             }
 
-            _this->m_displayRingBufL.push(temp, tempBufSize);
+            _this->m_waveformRingBufL.push(temp, tempBufSize);
 
             free(temp);
 
@@ -774,8 +743,8 @@ namespace audio_analyzer {
                 }
             }
 
-            _this->m_displayRingBufL.push(tempL, tempBufSize);
-            _this->m_displayRingBufR.push(tempR, tempBufSize);
+            _this->m_waveformRingBufL.push(tempL, tempBufSize);
+            _this->m_waveformRingBufR.push(tempR, tempBufSize);
 
             free(tempL);
             free(tempR);
@@ -830,13 +799,42 @@ namespace audio_analyzer {
         }
     }
 
+    void Manager::init() {
+        m_computeShaders = std::make_shared<std::vector<std::shared_ptr<audio_analyzer_gfx::Shader>>>();
+        loadShaders();
+    }
+
     void Manager::doPostInit() {
         return;
+    }
+
+    void Manager::loadShaders() {
+
+        /*
+        core::configManager.acquire();
+        std::string resDir = core::configManager.conf["resourcesDirectory"];
+        core::configManager.release();
+
+        std::string shaderPath = resDir+"/shaders/waveform.glsl";
+        */
+        std::string shaderPath = "/home/Bas/Software/SDR4P/root/res/shaders/waveform.glsl";
+        if (std::filesystem::is_regular_file(shaderPath)) {
+            std::shared_ptr<audio_analyzer_gfx::Shader> waveformShader = std::make_shared<audio_analyzer_gfx::Shader>();
+            waveformShader->name = "waveform";
+            if (!waveformShader->shader.load(shaderPath.c_str())) {
+                flog::error("Failed to load waveform shader");
+            } else {
+                m_computeShaders->push_back(waveformShader);
+            }
+        } else {
+            flog::error("Failed to load waveform shader, invalid path");
+        }
     }
 
     void Manager::addAnalyzer() {
         std::shared_ptr<Analyzer> analyzer = std::make_shared<Analyzer>();
         analyzer->init();
+        analyzer->initShaders(m_computeShaders);
         analyzer->initDisplayBuffers(240000);
         analyzer->start();
         m_analyzers.push_back(analyzer);
