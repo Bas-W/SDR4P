@@ -16,7 +16,7 @@ namespace opengl_helpers {
         size_t size = std::ftell(file);
         std::rewind(file);
 
-        if (!size > 0) {
+        if (size <= 0) {
             flog::error("Shader file contents invalid");
             return 0;
         }
