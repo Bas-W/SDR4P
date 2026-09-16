@@ -261,7 +261,7 @@ namespace audio_analyzer {
         }
 
         if (m_waveformDisplayBuf) free(m_waveformDisplayBuf);
-        m_waveformDisplayBuf = static_cast<float*>(malloc(m_waveformDisplayBufSize * sizeof(float)));
+        m_waveformDisplayBuf = static_cast<float*>(calloc(m_waveformDisplayBufSize, sizeof(float)));
 
         glBindBuffer(GL_ARRAY_BUFFER, m_waveformGpuBufId);
         glBufferData(GL_ARRAY_BUFFER, m_waveformDisplayBufSize * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
@@ -282,7 +282,7 @@ namespace audio_analyzer {
         glBindTexture(GL_TEXTURE_2D, 0);
 
         if (m_fftDisplayBuf) free(m_fftDisplayBuf);
-        m_fftDisplayBuf = static_cast<float*>(malloc((m_fftSize / 2) * sizeof(float)));
+        m_fftDisplayBuf = static_cast<float*>(calloc((m_fftSize / 2), sizeof(float)));
 
         if (m_waterfallDisplayBuf) free(m_waterfallDisplayBuf);
         m_waterfallDisplayBuf = static_cast<float*>(malloc(m_waterfallBinCount * m_fftSize / 2 * sizeof(float)));
@@ -819,13 +819,19 @@ namespace audio_analyzer {
         std::string shaderPath = resDir + "/shaders/audio/waveform/waveform_default.glsl";
 #endif
         if (std::filesystem::is_regular_file(shaderPath)) {
-            std::shared_ptr<audio_analyzer_gfx::Shader> waveformShader = std::make_shared<audio_analyzer_gfx::Shader>();
-            waveformShader->name = "waveform_default";
-            if (!waveformShader->shader.load(shaderPath.c_str())) {
-                flog::error("Failed to load waveform shader");
-            }
-            else {
-                m_computeShaders->push_back(waveformShader);
+            flog::info("Loading shader file: \"{}\"", shaderPath);
+            std::FILE* file = fopen(shaderPath.c_str(), "r");
+            if (!file) {
+                flog::error("Failed to load shader file");
+            } else {
+                std::shared_ptr<audio_analyzer_gfx::Shader> waveformShader = std::make_shared<audio_analyzer_gfx::Shader>();
+                waveformShader->name = "waveform_default";
+                if (!waveformShader->shader.load(file)) {
+                    flog::error("Failed to load waveform shader");
+                }
+                else {
+                    m_computeShaders->push_back(waveformShader);
+                }
             }
         }
         else {

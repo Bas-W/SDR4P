@@ -4,14 +4,7 @@
 #include "flog.h"
 
 namespace opengl_helpers {
-    inline GLuint loadComputeShader(const char* path) {
-        flog::info("Loading shader file: \"{}\"", path);
-        std::FILE* file = fopen(path, "r");
-        if (!file) {
-            flog::error("Failed to load shader file");
-            return 0;
-        }
-
+    inline GLuint loadComputeShader(std::FILE* file) {
         std::fseek(file, 0, SEEK_END);
         size_t size = std::ftell(file);
         std::rewind(file);
@@ -47,7 +40,7 @@ namespace opengl_helpers {
             char log[logLength + 1];
             glGetShaderInfoLog(shader_id, logLength, nullptr, (GLchar*)log);
 
-            flog::error("Failed to compile shader \"{}\":\n{}", path, log);
+            flog::error("Failed to compile shader:\n{}", log);
 
             glDeleteShader(shader_id);
             return 0;
@@ -78,11 +71,11 @@ namespace opengl_helpers {
             unload();
         }
 
-        bool load(const char* path) {
+        bool load(std::FILE* file) {
             if (m_shaderProgram) {
                 unload();
             }
-            GLuint shader = loadComputeShader(path);
+            GLuint shader = loadComputeShader(file);
             if (shader) {
                 GLuint program = linkComputeShader(shader);
                 glDeleteShader(shader);
