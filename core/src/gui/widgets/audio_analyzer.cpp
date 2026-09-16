@@ -851,8 +851,7 @@ namespace audio_analyzer {
             for (int i = 0; i < m_analyzers.size(); i++) {
                 m_analyzers.at(i)->draw();
             }
-
-            ImGui::EndChild();
         }
+        ImGui::EndChild();
     }
 }
