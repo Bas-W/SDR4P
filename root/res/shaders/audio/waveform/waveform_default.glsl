@@ -16,7 +16,6 @@ uniform float overlapRatio;
 void main() {
     ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
     ivec2 size = imageSize(outputTexture);
-    ivec2 uv = ivec2(pixel / size);
 
     if (pixel.x >= size.x || pixel.y >= size.y) {
         return;

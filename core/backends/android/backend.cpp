@@ -6,12 +6,11 @@
 #include "imgui_impl_android.h"
 #include "imgui_impl_opengl3.h"
 #include "../../thirdparty/implot/implot.h"
+#include "utils/opengl_include_code.h"
 
 #include <android/log.h>
 #include <android_native_app_glue.h>
 #include <android/asset_manager.h>
-#include <EGL/egl.h>
-#include <GLES3/gl3.h>
 #include <stdint.h>
 #include <gui/icons.h>
 #include <gui/style.h>
@@ -133,6 +132,11 @@ namespace backend {
 
             _EglSurface = eglCreateWindowSurface(_EglDisplay, egl_config, app->window, NULL);
             eglMakeCurrent(_EglDisplay, _EglSurface, _EglSurface, _EglContext);
+
+            if (!gladLoadGLES2Loader((GLADloadproc)eglGetProcAddress)) {
+                flog::error("Failed to load GLES");
+                return -1;
+            }
         }
 
         // Setup Dear ImGui context

@@ -329,7 +329,7 @@ namespace audio_analyzer {
     void Analyzer::initShaders(std::shared_ptr<std::vector<std::shared_ptr<audio_analyzer_gfx::Shader>>> computeShaders) {
         m_computeShaders = computeShaders;
         for (int i = 0; i < m_computeShaders->size(); i++) {
-            if (m_computeShaders->at(i)->name == "waveform") {
+            if (m_computeShaders->at(i)->name == "waveform_default") {
                 m_waveformShader = m_computeShaders->at(i);
                 break;
             }
@@ -500,7 +500,7 @@ namespace audio_analyzer {
 
                                 audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
 
-                                ImGui::Image((ImTextureID)(uintptr_t)m_waveformTexId, ImVec2(m_waveformDispWidth, m_waveformDispHeight));
+                                ImGui::Image((ImTextureID)(uintptr_t)m_waveformTexId, ImGui::GetContentRegionAvail());
                             }
                         }
                     } else {
@@ -809,24 +809,26 @@ namespace audio_analyzer {
     }
 
     void Manager::loadShaders() {
-
-        /*
         core::configManager.acquire();
         std::string resDir = core::configManager.conf["resourcesDirectory"];
         core::configManager.release();
 
-        std::string shaderPath = resDir+"/shaders/waveform.glsl";
-        */
-        std::string shaderPath = "/home/Bas/Software/SDR4P/root/res/shaders/waveform.glsl";
+#ifdef __ANDROID__
+        std::string shaderPath = resDir + "/shaders/audio/waveform/waveform_default_android.glsl";
+#else
+        std::string shaderPath = resDir + "/shaders/audio/waveform/waveform_default.glsl";
+#endif
         if (std::filesystem::is_regular_file(shaderPath)) {
             std::shared_ptr<audio_analyzer_gfx::Shader> waveformShader = std::make_shared<audio_analyzer_gfx::Shader>();
-            waveformShader->name = "waveform";
+            waveformShader->name = "waveform_default";
             if (!waveformShader->shader.load(shaderPath.c_str())) {
                 flog::error("Failed to load waveform shader");
-            } else {
+            }
+            else {
                 m_computeShaders->push_back(waveformShader);
             }
-        } else {
+        }
+        else {
             flog::error("Failed to load waveform shader, invalid path");
         }
     }

@@ -6,8 +6,8 @@
 #elif defined(__APPLE__)
 #include <OpenGL/gl.h>
 #elif defined(__ANDROID__)
+#include "glad/glad.h"
 #include <EGL/egl.h>
-#include <GLES3/gl3.h>
 #else
 #include "glad/glad.h"
 #include <GL/glext.h>
