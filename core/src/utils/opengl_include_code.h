@@ -2,7 +2,8 @@
 
 #if defined(_WIN32)
 #include <windows.h>
-#include <GL/gl.h>
+#include "glad/glad.h"
+#include <GL/glext.h>
 #elif defined(__APPLE__)
 #include <OpenGL/gl.h>
 #elif defined(__ANDROID__)

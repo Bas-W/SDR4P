@@ -98,6 +98,12 @@ namespace backend {
         if (window == NULL)
             return 1;
         glfwMakeContextCurrent(window);
+        if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress))) {
+            flog::error("Failed to initialize GLAD");
+            glfwDestroyWindow(window);
+            window = NULL;
+            continue;
+        }
     #else
         const char* glsl_version = "#version 120";
         monitor = NULL;
