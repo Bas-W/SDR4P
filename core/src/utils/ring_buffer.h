@@ -1,10 +1,8 @@
 #pragma once
 #include "Tracy.hpp"
-#include "flog.h"
-#include <cstdint>
 #include <cstring>
 #include <memory>
-#include <mutex>
+#include <shared_mutex>
 
 // Should be converted to template later
 
@@ -21,7 +19,7 @@ namespace rbuf {
         /// Param size: amount of values to keep (not bytes)
         void init(uint32_t size) {
             ZoneScoped;
-            std::lock_guard<std::mutex> lck(m_mutex);
+            std::unique_lock lck(m_mutex);
 
             if (m_buf) m_buf.reset();
             m_writeIdx = 0;
@@ -31,7 +29,7 @@ namespace rbuf {
 
         void freeBuf() {
             ZoneScoped;
-            std::lock_guard<std::mutex> lck(m_mutex);
+            std::unique_lock lck(m_mutex);
             m_buf.reset();
             m_size = 0;
         }
@@ -39,7 +37,7 @@ namespace rbuf {
         /// Push data to ring buffer
         void push(T* data, uint32_t count) {
             ZoneScoped;
-            std::lock_guard<std::mutex> lck(m_mutex);
+            std::unique_lock lck(m_mutex);
 
             if (m_size < 1) return;
 
@@ -62,7 +60,7 @@ namespace rbuf {
         /// Read from ringbuffer to regular buffer;
         void read(T* dest, uint32_t offset, uint32_t count) {
             ZoneScoped;
-            std::lock_guard<std::mutex> lck(m_mutex);
+            std::shared_lock lck(m_mutex);
 
             if (m_size < 1) return;
 
@@ -83,12 +81,12 @@ namespace rbuf {
 
         uint32_t getSize() {
             ZoneScoped;
-            std::lock_guard<std::mutex> lck(m_mutex);
+            std::shared_lock lck(m_mutex);
             return m_size;
         }
 
     private:
-        std::mutex m_mutex;
+        mutable std::shared_mutex m_mutex;
         std::shared_ptr<T> m_buf;
         uint32_t m_writeIdx = 0;
         uint32_t m_size = 0;
