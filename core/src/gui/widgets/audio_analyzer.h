@@ -25,8 +25,8 @@ namespace audio_analyzer {
     constexpr const char* waveformDisp_shader_name_default = "waveform";
     constexpr uint32_t waveformDisp_shader_workgroup_width_default = 1;
     constexpr uint32_t waveformDisp_shader_workgroup_height_default = 64;
-    constexpr uint32_t waveformDisp_display_width_default = 512;
-    constexpr uint32_t waveformDisp_display_height_default = 256;
+    constexpr uint32_t waveformDisp_display_width_default = 1024;
+    constexpr uint32_t waveformDisp_display_height_default = 512;
 
     enum DisplayMode {
         DisplayMode_lin,
@@ -172,7 +172,8 @@ namespace audio_analyzer {
 
         std::shared_ptr<audio_analyzer_gfx::Shader> m_waveformShader = nullptr;
         GLuint m_waveformGpuBufId = 0;
-        GLuint m_waveformTexId = 0;
+        GLuint m_waveformTexIdL = 0;
+        GLuint m_waveformTexIdR = 0;
 
         static void audioHandler(dsp::stereo_t* data, int count, void* ctx);
 

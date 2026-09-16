@@ -23,5 +23,8 @@ namespace audio_analyzer_gfx {
         float overlap;
     };
 
-    void drawWaveForm(const float* data, size_t size, ComputeShaderParams params, WaveformShaderInput shaderInp);
+    GLuint initTexture2D();
+    void setTexture2DParams(GLuint texture, uint width, uint height);
+
+    void drawWaveForm(const float* data, size_t size, const ComputeShaderParams& params, const WaveformShaderInput& shaderInp);
 }

@@ -3,6 +3,36 @@
 
 namespace audio_analyzer_gfx {
 
+    GLuint initTexture2D() {
+        GLuint texture = 0;
+
+        glGenTextures(1, &texture);
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glBindTexture(GL_TEXTURE_2D, 0);
+
+        return texture;
+    }
+
+    void setTexture2DParams(const GLuint texture, const uint width, const uint height) {
+        glBindTexture(GL_TEXTURE_2D, texture);
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_RGBA8,
+            width,
+            height,
+            0,
+            GL_RGB,
+            GL_UNSIGNED_BYTE,
+            nullptr
+        );
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
     /** Renders audio waveform
      *
      * Renders an audio waveform based on the provided sample data, using a shader.
@@ -12,7 +42,7 @@ namespace audio_analyzer_gfx {
      * @param params Parameters for shader handling
      * @param shaderInp Input (settings) to pass to the shader
      */
-    void drawWaveForm(const float* data, size_t size, ComputeShaderParams params, WaveformShaderInput shaderInp) {
+    void drawWaveForm(const float* data, const size_t size, const ComputeShaderParams& params, const WaveformShaderInput& shaderInp) {
         ZoneScoped;
 
         if (!data || !size || !params.buffer || !params.texture || !params.shader) {

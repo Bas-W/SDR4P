@@ -221,13 +221,8 @@ namespace audio_analyzer {
 
         if (!names.empty()) setAudioStream(names.at(0));
 
-        glGenTextures(1, &m_waveformTexId);
-        glBindTexture(GL_TEXTURE_2D, m_waveformTexId);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        m_waveformTexIdL = audio_analyzer_gfx::initTexture2D();
+        m_waveformTexIdR = audio_analyzer_gfx::initTexture2D();
 
         glGenBuffers(1, &m_waveformGpuBufId);
         glBindBuffer(GL_ARRAY_BUFFER, m_waveformGpuBufId);
@@ -267,19 +262,8 @@ namespace audio_analyzer {
         glBufferData(GL_ARRAY_BUFFER, m_waveformDisplayBufSize * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-        glBindTexture(GL_TEXTURE_2D, m_waveformTexId);
-        glTexImage2D(
-            GL_TEXTURE_2D,
-            0,
-            GL_RGBA8,
-            m_waveformDispWidth,
-            m_waveformDispHeight,
-            0,
-            GL_RGB,
-            GL_UNSIGNED_BYTE,
-            nullptr
-        );
-        glBindTexture(GL_TEXTURE_2D, 0);
+        audio_analyzer_gfx::setTexture2DParams(m_waveformTexIdL, m_waveformDispWidth, m_waveformDispHeight);
+        audio_analyzer_gfx::setTexture2DParams(m_waveformTexIdR, m_waveformDispWidth, m_waveformDispHeight);
 
         if (m_fftDisplayBuf) free(m_fftDisplayBuf);
         m_fftDisplayBuf = static_cast<float*>(calloc((m_fftSize / 2), sizeof(float)));
@@ -320,9 +304,14 @@ namespace audio_analyzer {
             m_waveformGpuBufId = 0;
         }
 
-        if (m_waveformTexId != 0) {
-            glDeleteTextures(1, &m_waveformTexId);
-            m_waveformTexId = 0;
+        if (m_waveformTexIdL != 0) {
+            glDeleteTextures(1, &m_waveformTexIdL);
+            m_waveformTexIdL = 0;
+        }
+
+        if (m_waveformTexIdR != 0) {
+            glDeleteTextures(1, &m_waveformTexIdR);
+            m_waveformTexIdR = 0;
         }
     }
 
@@ -459,7 +448,14 @@ namespace audio_analyzer {
             dispModeChanged = true;
         }
 
-        double binHz = static_cast<double>(sampleRate) / static_cast<double>(fftSize);
+        ImGui::SameLine();
+
+        ImGui::SetNextItemWidth(150 * style::uiScale);
+        if (ImGui::Combo("Render Mode##analyzer_renderMode", reinterpret_cast<int*>(&renderMode), RenderMode_str)) {
+            m_renderMode = renderMode;
+        }
+
+        double fftBinHz = static_cast<double>(sampleRate) / static_cast<double>(fftSize);
         int usefulBins = fftSize / 2;
 
         lock.unlock();
@@ -478,13 +474,23 @@ namespace audio_analyzer {
 
                     if (renderMode == RenderMode_Shader) {
                         ZoneScopedN("draw_analyzer_disp_waveformPlots_shader");
-                        if (m_waveformGpuBufId && m_waveformTexId && m_waveformShader) {
+
+                        ImVec2 waveFormDispSize;
+
+                        waveFormDispSize.x = spaceAvail.x;
+                        if (isMono) {
+                            waveFormDispSize.y = spaceAvail.y - ImGui::GetStyle().ItemSpacing.y;
+                        } else {
+                            waveFormDispSize.y = spaceAvail.y / 2.0f - ImGui::GetStyle().ItemSpacing.y;
+                        }
+
+                        if (m_waveformGpuBufId && m_waveformTexIdL && m_waveformShader) {
                             if (m_waveformShader->shader.m_shaderProgram) {
                                 m_waveformRingBufL.read(m_waveformDisplayBuf, 0, displayBufSize);
 
                                 audio_analyzer_gfx::ComputeShaderParams params{
                                     m_waveformGpuBufId,
-                                    m_waveformTexId,
+                                    m_waveformTexIdL,
                                     m_waveformShader->shader.m_shaderProgram,
                                     waveformDisp_shader_workgroup_width_default,
                                     waveformDisp_shader_workgroup_height_default,
@@ -500,7 +506,34 @@ namespace audio_analyzer {
 
                                 audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
 
-                                ImGui::Image((ImTextureID)(uintptr_t)m_waveformTexId, ImGui::GetContentRegionAvail());
+                                ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdL)), waveFormDispSize);
+                            }
+                        }
+                        if (!isMono) {
+                            if (m_waveformGpuBufId && m_waveformTexIdR && m_waveformShader) {
+                                if (m_waveformShader->shader.m_shaderProgram) {
+                                    m_waveformRingBufR.read(m_waveformDisplayBuf, 0, displayBufSize);
+
+                                    audio_analyzer_gfx::ComputeShaderParams params{
+                                        m_waveformGpuBufId,
+                                        m_waveformTexIdR,
+                                        m_waveformShader->shader.m_shaderProgram,
+                                        waveformDisp_shader_workgroup_width_default,
+                                        waveformDisp_shader_workgroup_height_default,
+                                        waveformDisp_display_width_default,
+                                        waveformDisp_display_height_default
+                                    };
+
+                                    audio_analyzer_gfx::WaveformShaderInput input{
+                                        -2.0f,
+                                        2.0f,
+                                        0.5f
+                                    };
+
+                                    audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
+
+                                    ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdR)), waveFormDispSize);
+                                }
                             }
                         }
                     } else {
@@ -562,18 +595,18 @@ namespace audio_analyzer {
 
                                 ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
 
-                                ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, binHz, sampleRate / 2.0);
+                                ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, fftBinHz, sampleRate / 2.0);
 
-                                ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Once);
+                                ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Once);
                                 ImPlot::SetupAxisLimits(ImAxis_Y1, -120.0, 0.0, ImPlotCond_Once);
 
                                 if (dispModeChanged) {
-                                    ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Always);
+                                    ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Always);
                                 }
 
-                                ImPlot::PlotLine("##analyzer_plot_fft_l", m_fftDisplayBuf + 1, usefulBins - 1, binHz);
+                                ImPlot::PlotLine("##analyzer_plot_fft_l", m_fftDisplayBuf + 1, usefulBins - 1, fftBinHz);
                                 ImPlot::PlotStems("##analyzer_plot_fft_l",
-                                                  m_fftDisplayBuf + 1, usefulBins - 1, -120, binHz, 0, ImPlotStemsFlags_None);
+                                                  m_fftDisplayBuf + 1, usefulBins - 1, -120, fftBinHz, 0, ImPlotStemsFlags_None);
 
                                 ImPlot::EndPlot();
                             }
@@ -590,14 +623,14 @@ namespace audio_analyzer {
 
                                 ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
 
-                                ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, binHz, sampleRate / 2.0);
+                                ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, fftBinHz, sampleRate / 2.0);
                                 ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, -1, 0);
 
-                                ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Once);
+                                ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Once);
                                 ImPlot::SetupAxisLimits(ImAxis_Y1, -1, 0, ImPlotCond_Once);
 
                                 if (dispModeChanged) {
-                                    ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Always);
+                                    ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Always);
                                 }
 
                                 ImPlot::PushColormap(ImPlotColormap_Viridis);
@@ -609,7 +642,7 @@ namespace audio_analyzer {
                                                     -100,
                                                     -10,
                                                     nullptr,
-                                                    ImPlotPoint(binHz, 0),
+                                                    ImPlotPoint(fftBinHz, 0),
                                                     ImPlotPoint(sampleRate / 2.0, -1),
                                                     ImPlotHeatmapFlags_None);
 
@@ -630,18 +663,18 @@ namespace audio_analyzer {
 
                                     ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
 
-                                    ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, binHz, sampleRate / 2.0);
+                                    ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, fftBinHz, sampleRate / 2.0);
 
-                                    ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Once);
+                                    ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Once);
                                     ImPlot::SetupAxisLimits(ImAxis_Y1, -120.0, 0.0, ImPlotCond_Once);
 
                                     if (dispModeChanged) {
-                                        ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Always);
+                                        ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Always);
                                     }
 
-                                    ImPlot::PlotLine("##analyzer_plot_fft_r", m_fftDisplayBuf + 1, usefulBins - 1, binHz);
+                                    ImPlot::PlotLine("##analyzer_plot_fft_r", m_fftDisplayBuf + 1, usefulBins - 1, fftBinHz);
                                     ImPlot::PlotStems("##analyzer_plot_fft_r",
-                                                      m_fftDisplayBuf + 1, usefulBins - 1, -120, binHz, 0, ImPlotStemsFlags_None);
+                                                      m_fftDisplayBuf + 1, usefulBins - 1, -120, fftBinHz, 0, ImPlotStemsFlags_None);
 
                                     ImPlot::EndPlot();
                                 }
@@ -658,14 +691,14 @@ namespace audio_analyzer {
 
                                     ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
 
-                                    ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, binHz, sampleRate / 2.0);
+                                    ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, fftBinHz, sampleRate / 2.0);
                                     ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, -1, 0);
 
-                                    ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Once);
+                                    ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Once);
                                     ImPlot::SetupAxisLimits(ImAxis_Y1, -1, 0, ImPlotCond_Once);
 
                                     if (dispModeChanged) {
-                                        ImPlot::SetupAxisLimits(ImAxis_X1, binHz, sampleRate / 2.0, ImPlotCond_Always);
+                                        ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Always);
                                     }
 
                                     ImPlot::PushColormap(ImPlotColormap_Viridis);
@@ -677,7 +710,7 @@ namespace audio_analyzer {
                                                         -100,
                                                         -10,
                                                         nullptr,
-                                                        ImPlotPoint(binHz, 0),
+                                                        ImPlotPoint(fftBinHz, 0),
                                                         ImPlotPoint(sampleRate / 2.0, -1),
                                                         ImPlotHeatmapFlags_None);
 
