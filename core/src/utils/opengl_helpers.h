@@ -16,7 +16,6 @@ namespace opengl_helpers {
 
         char data[size];
         size_t read = std::fread(data, 1, size, file);
-        std::fclose(file);
 
         if (read != size) {
             flog::error("Failed to read complete file");

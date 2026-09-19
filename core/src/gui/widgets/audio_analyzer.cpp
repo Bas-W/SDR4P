@@ -221,13 +221,13 @@ namespace audio_analyzer {
 
         if (!names.empty()) setAudioStream(names.at(0));
 
+        m_waveformGpuBufId = audio_analyzer_gfx::initGpuBuf();
         m_waveformTexIdL = audio_analyzer_gfx::initTexture2D();
         m_waveformTexIdR = audio_analyzer_gfx::initTexture2D();
 
-        glGenBuffers(1, &m_waveformGpuBufId);
-        glBindBuffer(GL_ARRAY_BUFFER, m_waveformGpuBufId);
-        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        m_fftGpuBufId = audio_analyzer_gfx::initGpuBuf();
+        m_fftTexIdL = audio_analyzer_gfx::initTexture2D();
+        m_fftTexIdR = audio_analyzer_gfx::initTexture2D();
     }
 
     void Analyzer::initDisplayBuffers(size_t waveformBufSize, size_t waterfallBinCount) {
@@ -258,18 +258,17 @@ namespace audio_analyzer {
         if (m_waveformDisplayBuf) free(m_waveformDisplayBuf);
         m_waveformDisplayBuf = static_cast<float*>(calloc(m_waveformDisplayBufSize, sizeof(float)));
 
-        glBindBuffer(GL_ARRAY_BUFFER, m_waveformGpuBufId);
-        glBufferData(GL_ARRAY_BUFFER, m_waveformDisplayBufSize * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-
-        audio_analyzer_gfx::setTexture2DParams(m_waveformTexIdL, m_waveformDispWidth, m_waveformDispHeight);
-        audio_analyzer_gfx::setTexture2DParams(m_waveformTexIdR, m_waveformDispWidth, m_waveformDispHeight);
-
         if (m_fftDisplayBuf) free(m_fftDisplayBuf);
         m_fftDisplayBuf = static_cast<float*>(calloc((m_fftSize / 2), sizeof(float)));
 
         if (m_waterfallDisplayBuf) free(m_waterfallDisplayBuf);
-        m_waterfallDisplayBuf = static_cast<float*>(malloc(m_waterfallBinCount * m_fftSize / 2 * sizeof(float)));
+        m_waterfallDisplayBuf = static_cast<float*>(calloc(m_waterfallBinCount * m_fftSize / 2, sizeof(float)));
+
+        audio_analyzer_gfx::setGpuBufParams(m_waveformGpuBufId, m_waveformDisplayBufSize * sizeof(float));
+        audio_analyzer_gfx::setGpuBufParams(m_fftGpuBufId, m_fftSize / 2 * sizeof(float));
+
+        setWaveformDispTexParams(m_waveformDispWidth, m_waveformDispHeight);
+        setFftDispTexParams(m_fftDispWidth, m_fftDispHeight);
     }
 
     void Analyzer::freeDisplayBuffers() {
@@ -299,30 +298,36 @@ namespace audio_analyzer {
             m_waterfallDisplayBuf = nullptr;
         }
 
-        if (m_waveformGpuBufId != 0) {
-            glDeleteBuffers(1, &m_waveformGpuBufId);
-            m_waveformGpuBufId = 0;
-        }
+        audio_analyzer_gfx::freeGpuBuf(&m_waveformGpuBufId);
+        audio_analyzer_gfx::freeTexture2D(&m_waveformTexIdL);
+        audio_analyzer_gfx::freeTexture2D(&m_waveformTexIdR);
 
-        if (m_waveformTexIdL != 0) {
-            glDeleteTextures(1, &m_waveformTexIdL);
-            m_waveformTexIdL = 0;
-        }
-
-        if (m_waveformTexIdR != 0) {
-            glDeleteTextures(1, &m_waveformTexIdR);
-            m_waveformTexIdR = 0;
-        }
+        audio_analyzer_gfx::freeGpuBuf(&m_fftGpuBufId);
+        audio_analyzer_gfx::freeTexture2D(&m_fftTexIdL);
+        audio_analyzer_gfx::freeTexture2D(&m_fftTexIdR);
     }
 
+    // @TODO: temporary hack, implement proper system
     void Analyzer::initShaders(std::shared_ptr<std::vector<std::shared_ptr<audio_analyzer_gfx::Shader>>> computeShaders) {
         m_computeShaders = computeShaders;
         for (int i = 0; i < m_computeShaders->size(); i++) {
             if (m_computeShaders->at(i)->name == "waveform_default") {
                 m_waveformShader = m_computeShaders->at(i);
-                break;
+            }
+            if (m_computeShaders->at(i)->name == "fft_line_default") {
+                m_fftShader = m_computeShaders->at(i);
             }
         }
+    }
+
+    void Analyzer::setWaveformDispTexParams(uint width, uint height) {
+        audio_analyzer_gfx::setTexture2DParams(m_waveformTexIdL, width, height);
+        audio_analyzer_gfx::setTexture2DParams(m_waveformTexIdR, width, height);
+    }
+
+    void Analyzer::setFftDispTexParams(uint width, uint height) {
+        audio_analyzer_gfx::setTexture2DParams(m_fftTexIdL, width, height);
+        audio_analyzer_gfx::setTexture2DParams(m_fftTexIdR, width, height);
     }
 
     void Analyzer::start() {
@@ -470,53 +475,38 @@ namespace audio_analyzer {
                     ImGui::TableNextRow();
                     ImGui::TableNextColumn();
 
-                    ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
-
                     if (renderMode == RenderMode_Shader) {
                         ZoneScopedN("draw_analyzer_disp_waveformPlots_shader");
 
-                        ImVec2 waveFormDispSize;
+                        if (ImGui::BeginChild("##analyzer_waveform")) {
 
-                        waveFormDispSize.x = spaceAvail.x;
-                        if (isMono) {
-                            waveFormDispSize.y = spaceAvail.y - ImGui::GetStyle().ItemSpacing.y;
-                        } else {
-                            waveFormDispSize.y = spaceAvail.y / 2.0f - ImGui::GetStyle().ItemSpacing.y;
-                        }
+                            ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
+                            ImVec2 waveformDispSize;
 
-                        if (m_waveformGpuBufId && m_waveformTexIdL && m_waveformShader) {
-                            if (m_waveformShader->shader.m_shaderProgram) {
-                                m_waveformRingBufL.read(m_waveformDisplayBuf, 0, displayBufSize);
-
-                                audio_analyzer_gfx::ComputeShaderParams params{
-                                    m_waveformGpuBufId,
-                                    m_waveformTexIdL,
-                                    m_waveformShader->shader.m_shaderProgram,
-                                    waveformDisp_shader_workgroup_width_default,
-                                    waveformDisp_shader_workgroup_height_default,
-                                    waveformDisp_display_width_default,
-                                    waveformDisp_display_height_default
-                                };
-
-                                audio_analyzer_gfx::WaveformShaderInput input{
-                                    -2.0f,
-                                    2.0f,
-                                    0.5f
-                                };
-
-                                audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
-
-                                ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdL)), waveFormDispSize);
+                            waveformDispSize.x = floor(spaceAvail.x);
+                            if (isMono) {
+                                waveformDispSize.y = floor(spaceAvail.y - ImGui::GetStyle().ItemSpacing.y);
                             }
-                        }
-                        if (!isMono) {
-                            if (m_waveformGpuBufId && m_waveformTexIdR && m_waveformShader) {
-                                if (m_waveformShader->shader.m_shaderProgram) {
-                                    m_waveformRingBufR.read(m_waveformDisplayBuf, 0, displayBufSize);
+                            else {
+                                waveformDispSize.y = floor(spaceAvail.y / 2.0f - ImGui::GetStyle().ItemSpacing.y);
+                            }
+
+                            uint newWaveformDispWidth = floor(waveformDispSize.x);
+                            uint newWaveformDispHeight = floor(waveformDispSize.y);
+
+                            if (m_waveformDispWidth != newWaveformDispWidth || m_waveformDispHeight != newWaveformDispHeight) {
+                                m_waveformDispWidth = std::clamp(newWaveformDispWidth, waveformDisp_display_size_min, waveformDisp_display_size_max);
+                                m_waveformDispHeight = std::clamp(newWaveformDispHeight, waveformDisp_display_size_min, waveformDisp_display_size_max);
+                                setWaveformDispTexParams(m_waveformDispWidth, m_waveformDispHeight);
+                            }
+
+                            if (m_waveformGpuBufId && m_waveformTexIdL && m_waveformShader) {
+                                if (m_waveformShader && m_waveformShader->shader.m_shaderProgram) {
+                                    m_waveformRingBufL.read(m_waveformDisplayBuf, 0, displayBufSize);
 
                                     audio_analyzer_gfx::ComputeShaderParams params{
                                         m_waveformGpuBufId,
-                                        m_waveformTexIdR,
+                                        m_waveformTexIdL,
                                         m_waveformShader->shader.m_shaderProgram,
                                         waveformDisp_shader_workgroup_width_default,
                                         waveformDisp_shader_workgroup_height_default,
@@ -531,12 +521,40 @@ namespace audio_analyzer {
                                     };
 
                                     audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
+                                }
+                                ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdL)), waveformDispSize);
+                            }
+                            if (!isMono) {
+                                if (m_waveformGpuBufId && m_waveformTexIdR && m_waveformShader) {
+                                    if (m_waveformShader->shader.m_shaderProgram) {
+                                    m_waveformRingBufR.read(m_waveformDisplayBuf, 0, displayBufSize);
 
-                                    ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdR)), waveFormDispSize);
+                                        audio_analyzer_gfx::ComputeShaderParams params{
+                                            m_waveformGpuBufId,
+                                            m_waveformTexIdR,
+                                            m_waveformShader->shader.m_shaderProgram,
+                                            waveformDisp_shader_workgroup_width_default,
+                                            waveformDisp_shader_workgroup_height_default,
+                                            waveformDisp_display_width_default,
+                                            waveformDisp_display_height_default
+                                        };
+
+                                        audio_analyzer_gfx::WaveformShaderInput input{
+                                            -2.0f,
+                                            2.0f,
+                                            0.5f
+                                        };
+
+                                        audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
+                                    }
+                                    ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdR)), waveformDispSize);
                                 }
                             }
+                            ImGui::EndChild();
                         }
-                    } else {
+                    }
+                    else {
+                        ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
                         static float ratiosWav[] = { 1, 1 };
                         if (ImPlot::BeginSubplots("Waveform##analyzer_waveform_plots", isMono ? 1 : 2, 1, ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y),
                                                   ImPlotSubplotFlags_ColMajor | ImPlotSubplotFlags_LinkAllX | ImPlotSubplotFlags_LinkAllY | ImPlotSubplotFlags_NoLegend, isMono ? 0 : ratiosWav)) {
@@ -575,88 +593,84 @@ namespace audio_analyzer {
                                 }
                             }
                             ImPlot::EndSubplots();
-                                                  }
+                        }
                     }
 
                     ImGui::TableNextColumn();
 
-                    static float ratiosSpec[] = { 1, 3 };
-                    if (ImPlot::BeginSubplots("Spectrum##analyzer_spectrum_plots", 2, isMono ? 1 : 2, ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y),
-                                              ImPlotSubplotFlags_ColMajor | ImPlotSubplotFlags_LinkAllX | ImPlotSubplotFlags_NoLegend, ratiosSpec)) {
-                        ZoneScopedN("draw_analyzer_disp_fftPlots");
+                    if (renderMode == RenderMode_Shader) {
+                        ZoneScopedN("draw_analyzer_disp_fftPlots_shader");
 
-                        if (m_fftDisplayBuf && m_processorL) {
-                            if (ImPlot::BeginPlot("##analyzer_plot_fft_l", ImVec2(-1.0f, -1.0f))) {
-                                ZoneScopedN("draw_analyzer_disp_fftPlot_0");
-                                m_processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
+                        if (ImGui::BeginChild("analyzer_fft")) {
 
-                                ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoTickMarks);
-                                ImPlot::SetupAxis(ImAxis_Y1, "dB");
+                            ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
+                            ImVec2 fftDispSize;
 
-                                ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
-
-                                ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, fftBinHz, sampleRate / 2.0);
-
-                                ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Once);
-                                ImPlot::SetupAxisLimits(ImAxis_Y1, -120.0, 0.0, ImPlotCond_Once);
-
-                                if (dispModeChanged) {
-                                    ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Always);
-                                }
-
-                                ImPlot::PlotLine("##analyzer_plot_fft_l", m_fftDisplayBuf + 1, usefulBins - 1, fftBinHz);
-                                ImPlot::PlotStems("##analyzer_plot_fft_l",
-                                                  m_fftDisplayBuf + 1, usefulBins - 1, -120, fftBinHz, 0, ImPlotStemsFlags_None);
-
-                                ImPlot::EndPlot();
+                            fftDispSize.x = floor(spaceAvail.x);
+                            if (isMono) {
+                                fftDispSize.y = floor(spaceAvail.y - ImGui::GetStyle().ItemSpacing.y);
                             }
-                        }
-
-                        if (m_waterfallDisplayBuf && m_processorL) {
-                            if (ImPlot::BeginPlot("##analyzer_plot_waterfall_l", ImVec2(-1.0f, -1.0f), ImPlotFlags_NoLegend)) {
-                                ZoneScopedN("draw_analyzer_disp_waterfallPlot_0");
-
-                                m_waterfallRingBufL.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * usefulBins);
-
-                                ImPlot::SetupAxis(ImAxis_Y1, "", ImPlotAxisFlags_NoDecorations);
-                                ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_Foreground);
-
-                                ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
-
-                                ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, fftBinHz, sampleRate / 2.0);
-                                ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, -1, 0);
-
-                                ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Once);
-                                ImPlot::SetupAxisLimits(ImAxis_Y1, -1, 0, ImPlotCond_Once);
-
-                                if (dispModeChanged) {
-                                    ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Always);
-                                }
-
-                                ImPlot::PushColormap(ImPlotColormap_Viridis);
-
-                                ImPlot::PlotHeatmap("##analyzer_plot_waterfall_l",
-                                                    m_waterfallDisplayBuf,
-                                                    waterfallFreqBinCount,
-                                                    usefulBins,
-                                                    -100,
-                                                    -10,
-                                                    nullptr,
-                                                    ImPlotPoint(fftBinHz, 0),
-                                                    ImPlotPoint(sampleRate / 2.0, -1),
-                                                    ImPlotHeatmapFlags_None);
-
-                                ImPlot::PopColormap();
-
-                                ImPlot::EndPlot();
+                            else {
+                                fftDispSize.y = floor(spaceAvail.y / 2.0f - ImGui::GetStyle().ItemSpacing.y);
                             }
-                        }
 
-                        if (!isMono) {
-                            if (m_fftDisplayBuf && m_processorR) {
-                                if (ImPlot::BeginPlot("##analyzer_plot_fft_r", ImVec2(-1.0f, -1.0f))) {
-                                    ZoneScopedN("draw_analyzer_disp_fftPlot_1");
-                                    m_processorR->readLatestFft(m_fftDisplayBuf, usefulBins);
+                            uint newFftDispWidth = floor(fftDispSize.x);
+                            uint newFftDispHeight = floor(fftDispSize.y);
+
+                            if (m_fftDispWidth != newFftDispWidth || m_fftDispHeight != newFftDispHeight) {
+                                m_fftDispWidth = std::clamp(newFftDispWidth, fftDisp_display_size_min, fftDisp_display_size_max);
+                                m_fftDispHeight = std::clamp(newFftDispHeight, fftDisp_display_size_min, fftDisp_display_size_max);
+                                setFftDispTexParams(m_fftDispWidth, m_fftDispHeight);
+                            }
+
+                            if (m_fftGpuBufId && m_fftTexIdL && m_fftShader) {
+                                if (m_fftShader && m_fftShader->shader.m_shaderProgram) {
+                                    m_processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
+
+                                    glUseProgram(m_fftShader->shader.m_shaderProgram);
+
+                                    glUniform1i(glGetUniformLocation(m_fftShader->shader.m_shaderProgram, "sampleCount"), static_cast<GLint>(usefulBins));
+                                    glUniform1f(glGetUniformLocation(m_fftShader->shader.m_shaderProgram, "minVal"), -120.0f);
+                                    glUniform1f(glGetUniformLocation(m_fftShader->shader.m_shaderProgram, "maxVal"), 0.0f);
+
+                                    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_fftGpuBufId);
+                                    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, usefulBins * sizeof(float), m_fftDisplayBuf);
+                                    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_fftGpuBufId);
+                                    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+                                    glBindTexture(GL_TEXTURE_2D, m_fftTexIdL);
+                                    glBindImageTexture(
+                                        1,
+                                        m_fftTexIdL,
+                                        0,
+                                        GL_FALSE,
+                                        0,
+                                        GL_WRITE_ONLY,
+                                        GL_RGBA8);
+
+                                    int groupsX = (float)m_fftDispWidth / (float)m_fftWorkGroupWidth + 0.5f;
+                                    int groupsY = (float)m_fftDispHeight / (float)m_fftWorkGroupHeight + 0.5f;
+                                    int groupsZ = 1;
+
+                                    glDispatchCompute(groupsX, groupsY, groupsZ);
+                                    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+                                }
+                                ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_fftTexIdL)), fftDispSize);
+                            }
+                            ImGui::EndChild();
+                        }
+                    }
+                    else {
+                        ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
+                        static float ratiosSpec[] = { 1, 3 };
+                        if (ImPlot::BeginSubplots("Spectrum##analyzer_spectrum_plots", 2, isMono ? 1 : 2, ImVec2(-1.0f, spaceAvail.y - ImGui::GetStyle().ItemSpacing.y),
+                                                  ImPlotSubplotFlags_ColMajor | ImPlotSubplotFlags_LinkAllX | ImPlotSubplotFlags_NoLegend, ratiosSpec)) {
+                            ZoneScopedN("draw_analyzer_disp_fftPlots");
+
+                            if (m_fftDisplayBuf && m_processorL) {
+                                if (ImPlot::BeginPlot("##analyzer_plot_fft_l", ImVec2(-1.0f, -1.0f))) {
+                                    ZoneScopedN("draw_analyzer_disp_fftPlot_0");
+                                    m_processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
 
                                     ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoTickMarks);
                                     ImPlot::SetupAxis(ImAxis_Y1, "dB");
@@ -672,19 +686,19 @@ namespace audio_analyzer {
                                         ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Always);
                                     }
 
-                                    ImPlot::PlotLine("##analyzer_plot_fft_r", m_fftDisplayBuf + 1, usefulBins - 1, fftBinHz);
-                                    ImPlot::PlotStems("##analyzer_plot_fft_r",
+                                    ImPlot::PlotLine("##analyzer_plot_fft_l", m_fftDisplayBuf + 1, usefulBins - 1, fftBinHz);
+                                    ImPlot::PlotStems("##analyzer_plot_fft_l",
                                                       m_fftDisplayBuf + 1, usefulBins - 1, -120, fftBinHz, 0, ImPlotStemsFlags_None);
 
                                     ImPlot::EndPlot();
                                 }
                             }
 
-                            if (m_waterfallDisplayBuf && m_processorR) {
-                                if (ImPlot::BeginPlot("##analyzer_plot_waterfall_r", ImVec2(-1.0f, -1.0f), ImPlotFlags_NoLegend)) {
-                                    ZoneScopedN("draw_analyzer_disp_waterfallPlot_1");
+                            if (m_waterfallDisplayBuf && m_processorL) {
+                                if (ImPlot::BeginPlot("##analyzer_plot_waterfall_l", ImVec2(-1.0f, -1.0f), ImPlotFlags_NoLegend)) {
+                                    ZoneScopedN("draw_analyzer_disp_waterfallPlot_0");
 
-                                    m_waterfallRingBufR.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * usefulBins);
+                                    m_waterfallRingBufL.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * usefulBins);
 
                                     ImPlot::SetupAxis(ImAxis_Y1, "", ImPlotAxisFlags_NoDecorations);
                                     ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_Foreground);
@@ -703,7 +717,7 @@ namespace audio_analyzer {
 
                                     ImPlot::PushColormap(ImPlotColormap_Viridis);
 
-                                    ImPlot::PlotHeatmap("##analyzer_plot_waterfall_r",
+                                    ImPlot::PlotHeatmap("##analyzer_plot_waterfall_l",
                                                         m_waterfallDisplayBuf,
                                                         waterfallFreqBinCount,
                                                         usefulBins,
@@ -719,9 +733,77 @@ namespace audio_analyzer {
                                     ImPlot::EndPlot();
                                 }
                             }
-                        }
 
-                        ImPlot::EndSubplots();
+                            if (!isMono) {
+                                if (m_fftDisplayBuf && m_processorR) {
+                                    if (ImPlot::BeginPlot("##analyzer_plot_fft_r", ImVec2(-1.0f, -1.0f))) {
+                                        ZoneScopedN("draw_analyzer_disp_fftPlot_1");
+                                        m_processorR->readLatestFft(m_fftDisplayBuf, usefulBins);
+
+                                        ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels | ImPlotAxisFlags_NoTickMarks);
+                                        ImPlot::SetupAxis(ImAxis_Y1, "dB");
+
+                                        ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
+
+                                        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, fftBinHz, sampleRate / 2.0);
+
+                                        ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Once);
+                                        ImPlot::SetupAxisLimits(ImAxis_Y1, -120.0, 0.0, ImPlotCond_Once);
+
+                                        if (dispModeChanged) {
+                                            ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Always);
+                                        }
+
+                                        ImPlot::PlotLine("##analyzer_plot_fft_r", m_fftDisplayBuf + 1, usefulBins - 1, fftBinHz);
+                                        ImPlot::PlotStems("##analyzer_plot_fft_r",
+                                                          m_fftDisplayBuf + 1, usefulBins - 1, -120, fftBinHz, 0, ImPlotStemsFlags_None);
+
+                                        ImPlot::EndPlot();
+                                    }
+                                }
+
+                                if (m_waterfallDisplayBuf && m_processorR) {
+                                    if (ImPlot::BeginPlot("##analyzer_plot_waterfall_r", ImVec2(-1.0f, -1.0f), ImPlotFlags_NoLegend)) {
+                                        ZoneScopedN("draw_analyzer_disp_waterfallPlot_1");
+
+                                        m_waterfallRingBufR.read(m_waterfallDisplayBuf, 0, waterfallFreqBinCount * usefulBins);
+
+                                        ImPlot::SetupAxis(ImAxis_Y1, "", ImPlotAxisFlags_NoDecorations);
+                                        ImPlot::SetupAxis(ImAxis_X1, "Hz", ImPlotAxisFlags_Foreground);
+
+                                        ImPlot::SetupAxisScale(ImAxis_X1, displayMode == DisplayMode_log10 ? ImPlotScale_Log10 : ImPlotScale_Linear);
+
+                                        ImPlot::SetupAxisLimitsConstraints(ImAxis_X1, fftBinHz, sampleRate / 2.0);
+                                        ImPlot::SetupAxisLimitsConstraints(ImAxis_Y1, -1, 0);
+
+                                        ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Once);
+                                        ImPlot::SetupAxisLimits(ImAxis_Y1, -1, 0, ImPlotCond_Once);
+
+                                        if (dispModeChanged) {
+                                            ImPlot::SetupAxisLimits(ImAxis_X1, fftBinHz, sampleRate / 2.0, ImPlotCond_Always);
+                                        }
+
+                                        ImPlot::PushColormap(ImPlotColormap_Viridis);
+
+                                        ImPlot::PlotHeatmap("##analyzer_plot_waterfall_r",
+                                                            m_waterfallDisplayBuf,
+                                                            waterfallFreqBinCount,
+                                                            usefulBins,
+                                                            -100,
+                                                            -10,
+                                                            nullptr,
+                                                            ImPlotPoint(fftBinHz, 0),
+                                                            ImPlotPoint(sampleRate / 2.0, -1),
+                                                            ImPlotHeatmapFlags_None);
+
+                                        ImPlot::PopColormap();
+
+                                        ImPlot::EndPlot();
+                                    }
+                                }
+                            }
+                            ImPlot::EndSubplots();
+                        }
                     }
                     ImGui::EndTable();
                 }
@@ -841,6 +923,7 @@ namespace audio_analyzer {
         return;
     }
 
+    // @TODO: temporary hack, implement proper system
     void Manager::loadShaders() {
         core::configManager.acquire();
         std::string resDir = core::configManager.conf["resourcesDirectory"];
@@ -856,7 +939,8 @@ namespace audio_analyzer {
             std::FILE* file = fopen(shaderPath.c_str(), "r");
             if (!file) {
                 flog::error("Failed to load shader file");
-            } else {
+            }
+            else {
                 std::shared_ptr<audio_analyzer_gfx::Shader> waveformShader = std::make_shared<audio_analyzer_gfx::Shader>();
                 waveformShader->name = "waveform_default";
                 if (!waveformShader->shader.load(file)) {
@@ -865,10 +949,38 @@ namespace audio_analyzer {
                 else {
                     m_computeShaders->push_back(waveformShader);
                 }
+                fclose(file);
             }
         }
         else {
             flog::error("Failed to load waveform shader, invalid path");
+        }
+
+#ifdef __ANDROID__
+        shaderPath = resDir + "/shaders/audio/fft/line/fft_line_default_android.glsl";
+#else
+        shaderPath = resDir + "/shaders/audio/fft/line/fft_line_default.glsl";
+#endif
+        if (std::filesystem::is_regular_file(shaderPath)) {
+            flog::info("Loading shader file: \"{}\"", shaderPath);
+            std::FILE* file = fopen(shaderPath.c_str(), "r");
+            if (!file) {
+                flog::error("Failed to load shader file");
+            }
+            else {
+                std::shared_ptr<audio_analyzer_gfx::Shader> fftShader = std::make_shared<audio_analyzer_gfx::Shader>();
+                fftShader->name = "fft_line_default";
+                if (!fftShader->shader.load(file)) {
+                    flog::error("Failed to load fft shader");
+                }
+                else {
+                    m_computeShaders->push_back(fftShader);
+                }
+                fclose(file);
+            }
+        }
+        else {
+            flog::error("Failed to load fft shader, invalid path");
         }
     }
 

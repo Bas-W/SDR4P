@@ -24,7 +24,13 @@ namespace audio_analyzer_gfx {
     };
 
     GLuint initTexture2D();
+    GLuint initGpuBuf();
+
     void setTexture2DParams(GLuint texture, uint width, uint height);
+    void setGpuBufParams(GLuint buf, uint size);
+
+    void freeTexture2D(GLuint* texture);
+    void freeGpuBuf(GLuint* buf);
 
     void drawWaveForm(const float* data, size_t size, const ComputeShaderParams& params, const WaveformShaderInput& shaderInp);
 }

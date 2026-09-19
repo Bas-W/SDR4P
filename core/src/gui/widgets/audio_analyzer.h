@@ -23,10 +23,21 @@ namespace audio_analyzer {
     constexpr uint32_t fftWaterfallBinCount_default = 256;
 
     constexpr const char* waveformDisp_shader_name_default = "waveform";
-    constexpr uint32_t waveformDisp_shader_workgroup_width_default = 1;
-    constexpr uint32_t waveformDisp_shader_workgroup_height_default = 64;
+
+    constexpr uint waveformDisp_display_size_min = 256;
+    constexpr uint waveformDisp_display_size_max = 4096;
     constexpr uint32_t waveformDisp_display_width_default = 1024;
     constexpr uint32_t waveformDisp_display_height_default = 512;
+    constexpr uint32_t waveformDisp_shader_workgroup_width_default = 1;
+    constexpr uint32_t waveformDisp_shader_workgroup_height_default = 64;
+
+    constexpr uint32_t fftDisp_display_size_min = 256;
+    constexpr uint32_t fftDisp_display_size_max = 4096;
+    constexpr uint32_t fftDisp_display_width_default = 1024;
+    constexpr uint32_t fftDisp_display_height_default = 512;
+    constexpr uint32_t fftDisp_shader_workgroup_width_default = 1;
+    constexpr uint32_t fftDisp_shader_workgroup_height_default = 64;
+
 
     enum DisplayMode {
         DisplayMode_lin,
@@ -114,6 +125,8 @@ namespace audio_analyzer {
         void freeDisplayBuffers();
 
         void initShaders(std::shared_ptr<std::vector<std::shared_ptr<audio_analyzer_gfx::Shader>>> computeShaders);
+        void setWaveformDispTexParams(uint width, uint height);
+        void setFftDispTexParams(uint width, uint height);
 
         void start();
         void stop();
@@ -139,11 +152,15 @@ namespace audio_analyzer {
         std::string m_audioStreamName;
         uint64_t m_sampleRate = 0;
 
-        int m_waveformDispWidth = waveformDisp_display_width_default;
-        int m_waveformDispHeight = waveformDisp_display_height_default;
+        uint m_waveformDispWidth = waveformDisp_display_width_default;
+        uint m_waveformDispHeight = waveformDisp_display_height_default;
+        uint m_fftDispWidth = fftDisp_display_width_default;
+        uint m_fftDispHeight = fftDisp_display_height_default;
 
-        int m_waveformWorkGroupWidth = waveformDisp_shader_workgroup_width_default;
-        int m_waveformWorkGroupHeight = waveformDisp_shader_workgroup_height_default;
+        uint m_waveformWorkGroupWidth = waveformDisp_shader_workgroup_width_default;
+        uint m_waveformWorkGroupHeight = waveformDisp_shader_workgroup_height_default;
+        uint m_fftWorkGroupWidth = fftDisp_shader_workgroup_width_default;
+        uint m_fftWorkGroupHeight = fftDisp_shader_workgroup_height_default;
 
         int m_fftSize = fftFreqBinSize_default;
         size_t m_waterfallBinCount = fftWaterfallBinCount_default;
@@ -174,6 +191,11 @@ namespace audio_analyzer {
         GLuint m_waveformGpuBufId = 0;
         GLuint m_waveformTexIdL = 0;
         GLuint m_waveformTexIdR = 0;
+
+        std::shared_ptr<audio_analyzer_gfx::Shader> m_fftShader = nullptr;
+        GLuint m_fftGpuBufId = 0;
+        GLuint m_fftTexIdL = 0;
+        GLuint m_fftTexIdR = 0;
 
         static void audioHandler(dsp::stereo_t* data, int count, void* ctx);
 
