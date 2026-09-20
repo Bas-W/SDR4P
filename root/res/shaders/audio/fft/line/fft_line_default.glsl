@@ -75,10 +75,13 @@ void main() {
         float valLo = samples[sampleLo];
         float valHi = samples[sampleHi];
 
-        float val = valLo + (centerSampleF - float(sampleLo)) * (valHi - valLo);
-        int valY = int(round((1.0f - (val - minVal) / valueRange) * float(size.y - 1)));
+        vec2 pxLo = vec2(float(sampleLo) / float(sampleCount) * float(size.x), (1.0f - (valLo - minVal) / valueRange) * float(size.y - 1));
+        vec2 pxHi = vec2(float(sampleHi) / float(sampleCount) * float(size.x), (1.0f - (valHi - minVal) / valueRange) * float(size.y - 1));
 
-        if (pixel.y == valY){
+        float dist = abs((pxHi.y - pxLo.y) * float(pixel.x) - (pxHi.x - pxLo.x) * float(pixel.y) + pxHi.x * pxLo.y - pxHi.y * pxLo.x) /
+        sqrt((pxHi.y - pxLo.y) * (pxHi.y - pxLo.y) + (pxHi.x - pxLo.x) * (pxHi.x - pxLo.x));
+
+        if (dist <= 0.6f){
             color = lineColor;
         }
     }

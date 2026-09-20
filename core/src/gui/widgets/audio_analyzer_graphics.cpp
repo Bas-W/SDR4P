@@ -121,8 +121,45 @@ namespace audio_analyzer_gfx {
             GL_RGBA8
         );
 
-        int groupsX = (float)params.textureSize_x / (float)params.workGroupSize_x + 0.5f;
-        int groupsY = (float)params.textureSize_y / (float)params.workGroupSize_y + 0.5f;
+        int groupsX = (params.textureSize_x + params.workGroupSize_x - 1) / params.workGroupSize_x;
+        int groupsY = (params.textureSize_y + params.workGroupSize_y - 1) / params.workGroupSize_y;
+        int groupsZ = 1;
+
+        glDispatchCompute(groupsX, groupsY, groupsZ);
+        glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+    }
+
+    void drawFft(const float* data, size_t size, const ComputeShaderParams& params, const fftShaderInput& shaderInp) {
+        ZoneScoped;
+
+        if (!data || !size || !params.buffer || !params.texture || !params.shader) {
+            return;
+        }
+
+        glUseProgram(params.shader);
+
+        glUniform1i(glGetUniformLocation(params.shader, "sampleCount"), static_cast<GLint>(size));
+        glUniform1f(glGetUniformLocation(params.shader, "minVal"), shaderInp.minVal);
+        glUniform1f(glGetUniformLocation(params.shader, "maxVal"), shaderInp.maxVal);
+
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, params.buffer);
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, size * sizeof(float), data);
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, params.buffer);
+        glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+
+        glBindTexture(GL_TEXTURE_2D, params.texture);
+        glBindImageTexture(
+            1,
+            params.texture,
+            0,
+            GL_FALSE,
+            0,
+            GL_WRITE_ONLY,
+            GL_RGBA8
+        );
+
+        int groupsX = (params.textureSize_x + params.workGroupSize_x - 1) / params.workGroupSize_x;
+        int groupsY = (params.textureSize_y + params.workGroupSize_y - 1) / params.workGroupSize_y;
         int groupsZ = 1;
 
         glDispatchCompute(groupsX, groupsY, groupsZ);

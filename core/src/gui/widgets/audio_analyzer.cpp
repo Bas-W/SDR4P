@@ -478,35 +478,58 @@ namespace audio_analyzer {
                     if (renderMode == RenderMode_Shader) {
                         ZoneScopedN("draw_analyzer_disp_waveformPlots_shader");
 
-                        if (ImGui::BeginChild("##analyzer_waveform")) {
+                        ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
+                        ImVec2 waveformDispSize;
 
-                            ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
-                            ImVec2 waveformDispSize;
+                        waveformDispSize.x = floor(spaceAvail.x);
+                        if (isMono) {
+                            waveformDispSize.y = floor(spaceAvail.y - ImGui::GetStyle().ItemSpacing.y);
+                        }
+                        else {
+                            waveformDispSize.y = floor(spaceAvail.y / 2.0f - ImGui::GetStyle().ItemSpacing.y);
+                        }
 
-                            waveformDispSize.x = floor(spaceAvail.x);
-                            if (isMono) {
-                                waveformDispSize.y = floor(spaceAvail.y - ImGui::GetStyle().ItemSpacing.y);
+                        uint newWaveformDispWidth = floor(waveformDispSize.x);
+                        uint newWaveformDispHeight = floor(waveformDispSize.y);
+
+                        if (m_waveformDispWidth != newWaveformDispWidth || m_waveformDispHeight != newWaveformDispHeight) {
+                            m_waveformDispWidth = std::clamp(newWaveformDispWidth, waveformDisp_display_size_min, waveformDisp_display_size_max);
+                            m_waveformDispHeight = std::clamp(newWaveformDispHeight, waveformDisp_display_size_min, waveformDisp_display_size_max);
+                            setWaveformDispTexParams(m_waveformDispWidth, m_waveformDispHeight);
+                        }
+
+                        if (m_waveformGpuBufId && m_waveformTexIdL && m_waveformShader) {
+                            if (m_waveformShader && m_waveformShader->shader.m_shaderProgram) {
+                                m_waveformRingBufL.read(m_waveformDisplayBuf, 0, displayBufSize);
+
+                                audio_analyzer_gfx::ComputeShaderParams params{
+                                    m_waveformGpuBufId,
+                                    m_waveformTexIdL,
+                                    m_waveformShader->shader.m_shaderProgram,
+                                    waveformDisp_shader_workgroup_width_default,
+                                    waveformDisp_shader_workgroup_height_default,
+                                    waveformDisp_display_width_default,
+                                    waveformDisp_display_height_default
+                                };
+
+                                audio_analyzer_gfx::WaveformShaderInput input{
+                                    -1.5f,
+                                    1.5f,
+                                    0.5f
+                                };
+
+                                audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
                             }
-                            else {
-                                waveformDispSize.y = floor(spaceAvail.y / 2.0f - ImGui::GetStyle().ItemSpacing.y);
-                            }
-
-                            uint newWaveformDispWidth = floor(waveformDispSize.x);
-                            uint newWaveformDispHeight = floor(waveformDispSize.y);
-
-                            if (m_waveformDispWidth != newWaveformDispWidth || m_waveformDispHeight != newWaveformDispHeight) {
-                                m_waveformDispWidth = std::clamp(newWaveformDispWidth, waveformDisp_display_size_min, waveformDisp_display_size_max);
-                                m_waveformDispHeight = std::clamp(newWaveformDispHeight, waveformDisp_display_size_min, waveformDisp_display_size_max);
-                                setWaveformDispTexParams(m_waveformDispWidth, m_waveformDispHeight);
-                            }
-
-                            if (m_waveformGpuBufId && m_waveformTexIdL && m_waveformShader) {
-                                if (m_waveformShader && m_waveformShader->shader.m_shaderProgram) {
-                                    m_waveformRingBufL.read(m_waveformDisplayBuf, 0, displayBufSize);
+                            ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdL)), waveformDispSize);
+                        }
+                        if (!isMono) {
+                            if (m_waveformGpuBufId && m_waveformTexIdR && m_waveformShader) {
+                                if (m_waveformShader->shader.m_shaderProgram) {
+                                    m_waveformRingBufR.read(m_waveformDisplayBuf, 0, displayBufSize);
 
                                     audio_analyzer_gfx::ComputeShaderParams params{
                                         m_waveformGpuBufId,
-                                        m_waveformTexIdL,
+                                        m_waveformTexIdR,
                                         m_waveformShader->shader.m_shaderProgram,
                                         waveformDisp_shader_workgroup_width_default,
                                         waveformDisp_shader_workgroup_height_default,
@@ -515,42 +538,15 @@ namespace audio_analyzer {
                                     };
 
                                     audio_analyzer_gfx::WaveformShaderInput input{
-                                        -2.0f,
-                                        2.0f,
+                                        -1.5f,
+                                        1.5f,
                                         0.5f
                                     };
 
                                     audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
                                 }
-                                ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdL)), waveformDispSize);
+                                ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdR)), waveformDispSize);
                             }
-                            if (!isMono) {
-                                if (m_waveformGpuBufId && m_waveformTexIdR && m_waveformShader) {
-                                    if (m_waveformShader->shader.m_shaderProgram) {
-                                    m_waveformRingBufR.read(m_waveformDisplayBuf, 0, displayBufSize);
-
-                                        audio_analyzer_gfx::ComputeShaderParams params{
-                                            m_waveformGpuBufId,
-                                            m_waveformTexIdR,
-                                            m_waveformShader->shader.m_shaderProgram,
-                                            waveformDisp_shader_workgroup_width_default,
-                                            waveformDisp_shader_workgroup_height_default,
-                                            waveformDisp_display_width_default,
-                                            waveformDisp_display_height_default
-                                        };
-
-                                        audio_analyzer_gfx::WaveformShaderInput input{
-                                            -2.0f,
-                                            2.0f,
-                                            0.5f
-                                        };
-
-                                        audio_analyzer_gfx::drawWaveForm(m_waveformDisplayBuf, m_waveformDisplayBufSize, params, input);
-                                    }
-                                    ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_waveformTexIdR)), waveformDispSize);
-                                }
-                            }
-                            ImGui::EndChild();
                         }
                     }
                     else {
@@ -601,63 +597,73 @@ namespace audio_analyzer {
                     if (renderMode == RenderMode_Shader) {
                         ZoneScopedN("draw_analyzer_disp_fftPlots_shader");
 
-                        if (ImGui::BeginChild("analyzer_fft")) {
+                        ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
+                        ImVec2 fftDispSize;
 
-                            ImVec2 spaceAvail = ImGui::GetContentRegionAvail();
-                            ImVec2 fftDispSize;
+                        fftDispSize.x = floor(spaceAvail.x);
+                        if (isMono) {
+                            fftDispSize.y = floor(spaceAvail.y - ImGui::GetStyle().ItemSpacing.y);
+                        }
+                        else {
+                            fftDispSize.y = floor(spaceAvail.y / 2.0f - ImGui::GetStyle().ItemSpacing.y);
+                        }
 
-                            fftDispSize.x = floor(spaceAvail.x);
-                            if (isMono) {
-                                fftDispSize.y = floor(spaceAvail.y - ImGui::GetStyle().ItemSpacing.y);
+                        uint newFftDispWidth = floor(fftDispSize.x);
+                        uint newFftDispHeight = floor(fftDispSize.y);
+
+                        if (m_fftDispWidth != newFftDispWidth || m_fftDispHeight != newFftDispHeight) {
+                            m_fftDispWidth = std::clamp(newFftDispWidth, fftDisp_display_size_min, fftDisp_display_size_max);
+                            m_fftDispHeight = std::clamp(newFftDispHeight, fftDisp_display_size_min, fftDisp_display_size_max);
+                            setFftDispTexParams(m_fftDispWidth, m_fftDispHeight);
+                        }
+
+                        if (m_fftGpuBufId && m_fftTexIdL && m_fftShader) {
+                            if (m_fftShader && m_fftShader->shader.m_shaderProgram) {
+                                m_processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
+
+                                audio_analyzer_gfx::ComputeShaderParams params{
+                                    m_fftGpuBufId,
+                                    m_fftTexIdL,
+                                    m_fftShader->shader.m_shaderProgram,
+                                    fftDisp_shader_workgroup_width_default,
+                                    fftDisp_shader_workgroup_height_default,
+                                    fftDisp_display_width_default,
+                                    fftDisp_display_height_default
+                                };
+
+                                audio_analyzer_gfx::fftShaderInput input{
+                                    -120.0f,
+                                    0.0f
+                                };
+
+                                audio_analyzer_gfx::drawFft(m_fftDisplayBuf, usefulBins, params, input);
                             }
-                            else {
-                                fftDispSize.y = floor(spaceAvail.y / 2.0f - ImGui::GetStyle().ItemSpacing.y);
-                            }
-
-                            uint newFftDispWidth = floor(fftDispSize.x);
-                            uint newFftDispHeight = floor(fftDispSize.y);
-
-                            if (m_fftDispWidth != newFftDispWidth || m_fftDispHeight != newFftDispHeight) {
-                                m_fftDispWidth = std::clamp(newFftDispWidth, fftDisp_display_size_min, fftDisp_display_size_max);
-                                m_fftDispHeight = std::clamp(newFftDispHeight, fftDisp_display_size_min, fftDisp_display_size_max);
-                                setFftDispTexParams(m_fftDispWidth, m_fftDispHeight);
-                            }
-
-                            if (m_fftGpuBufId && m_fftTexIdL && m_fftShader) {
+                            ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_fftTexIdL)), fftDispSize);
+                        }
+                        if (!isMono) {
+                            if (m_fftGpuBufId && m_fftTexIdR && m_fftShader) {
                                 if (m_fftShader && m_fftShader->shader.m_shaderProgram) {
-                                    m_processorL->readLatestFft(m_fftDisplayBuf, usefulBins);
+                                    m_processorR->readLatestFft(m_fftDisplayBuf, usefulBins);
 
-                                    glUseProgram(m_fftShader->shader.m_shaderProgram);
+                                    audio_analyzer_gfx::ComputeShaderParams params{
+                                        m_fftGpuBufId,
+                                        m_fftTexIdR,
+                                        m_fftShader->shader.m_shaderProgram,
+                                        fftDisp_shader_workgroup_width_default,
+                                        fftDisp_shader_workgroup_height_default,
+                                        fftDisp_display_width_default,
+                                        fftDisp_display_height_default
+                                    };
 
-                                    glUniform1i(glGetUniformLocation(m_fftShader->shader.m_shaderProgram, "sampleCount"), static_cast<GLint>(usefulBins));
-                                    glUniform1f(glGetUniformLocation(m_fftShader->shader.m_shaderProgram, "minVal"), -120.0f);
-                                    glUniform1f(glGetUniformLocation(m_fftShader->shader.m_shaderProgram, "maxVal"), 0.0f);
+                                    audio_analyzer_gfx::fftShaderInput input{
+                                        -120.0f,
+                                        0.0f
+                                    };
 
-                                    glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_fftGpuBufId);
-                                    glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, usefulBins * sizeof(float), m_fftDisplayBuf);
-                                    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_fftGpuBufId);
-                                    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-
-                                    glBindTexture(GL_TEXTURE_2D, m_fftTexIdL);
-                                    glBindImageTexture(
-                                        1,
-                                        m_fftTexIdL,
-                                        0,
-                                        GL_FALSE,
-                                        0,
-                                        GL_WRITE_ONLY,
-                                        GL_RGBA8);
-
-                                    int groupsX = (float)m_fftDispWidth / (float)m_fftWorkGroupWidth + 0.5f;
-                                    int groupsY = (float)m_fftDispHeight / (float)m_fftWorkGroupHeight + 0.5f;
-                                    int groupsZ = 1;
-
-                                    glDispatchCompute(groupsX, groupsY, groupsZ);
-                                    glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL_TEXTURE_FETCH_BARRIER_BIT);
+                                    audio_analyzer_gfx::drawFft(m_fftDisplayBuf, usefulBins, params, input);
                                 }
-                                ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_fftTexIdL)), fftDispSize);
+                                ImGui::Image(reinterpret_cast<ImTextureID>(static_cast<uintptr_t>(m_fftTexIdR)), fftDispSize);
                             }
-                            ImGui::EndChild();
                         }
                     }
                     else {

@@ -23,6 +23,11 @@ namespace audio_analyzer_gfx {
         float overlap;
     };
 
+    struct fftShaderInput {
+        float minVal;
+        float maxVal;
+    };
+
     GLuint initTexture2D();
     GLuint initGpuBuf();
 
@@ -33,4 +38,5 @@ namespace audio_analyzer_gfx {
     void freeGpuBuf(GLuint* buf);
 
     void drawWaveForm(const float* data, size_t size, const ComputeShaderParams& params, const WaveformShaderInput& shaderInp);
+    void drawFft(const float* data, size_t size, const ComputeShaderParams& params, const fftShaderInput& shaderInp);
 }
